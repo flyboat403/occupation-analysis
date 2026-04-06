@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "职业分析报告数据格式模板 - SKILL.md 步骤14 输出标准",
+  
+  "major_info": {
+    "major_code": "710202",
+    "major_name": "计算机网络技术",
+    "education_level": "中等职业教育",
+    "career_orientation": "面向...职业，...岗位（群）",
+    "training_goal": "本专业培养..."
+  },
+  
+  "occupations": [
+    {
+      "code": "2-02-10-04",
+      "name": "计算机网络工程技术人员",
+      "definition": "从事...的人员",
+      "tasks": ["任务1", "任务2"],
+      "source": "职业大典2022"
+    }
+  ],
+  
+  "jobs": [
+    {
+      "name": "网络管理与维护",
+      "related_occupation": "2-02-10-04"
+    }
+  ],
+  
+  "typical_tasks": [
+    {
+      "id": "TT001",
+      "name": "网络设备配置与管理",
+      "related_job": "网络管理与维护",
+      "related_tasks": ["T001", "T002"],
+      "difficulty_level": "中级",
+      "skill_category": "网络配置",
+      "work_object": "路由器、交换机等网络设备",
+      "tools_materials": "配置线、终端软件、网络设备",
+      "work_method": "设备连接→参数配置→功能测试",
+      "labor_organization": "独立完成或小组协作",
+      "work_requirements": "能独立完成常见网络设备的基本配置"
+    }
+  ],
+  
+  "action_domains": [
+    {
+      "id": "AD001",
+      "name": "网络设备配置与管理",
+      "tasks": ["TT001"],
+      "skill_level": "初级→中级→高级",
+      "reference_hours": 72,
+      "abilities": {
+        "professional": [
+          {
+            "code": "Z001",
+            "name": "网络设备配置能力",
+            "description": "能配置路由器、交换机等常见网络设备的基本参数",
+            "knowledge": ["网络基础知识", "设备配置命令"],
+            "skill": ["设备连接操作", "参数配置操作"],
+            "attitude": ["认真细致", "规范操作"]
+          }
+        ],
+        "methodological": [
+          {
+            "code": "F001",
+            "name": "问题分析与解决能力",
+            "description": "能分析问题原因，制定解决方案"
+          }
+        ],
+        "social": [
+          {
+            "code": "S001",
+            "name": "沟通协作能力",
+            "description": "能与团队成员有效沟通，协作完成任务"
+          }
+        ]
+      }
+    }
+  ],
+  
+  "abilities": {
+    "professional": [
+      {"code": "Z001", "name": "网络设备配置能力", "description": "能配置..."}
+    ],
+    "methodological": [
+      {"code": "F001", "name": "问题分析能力", "description": "能分析..."}
+    ],
+    "social": [
+      {"code": "S001", "name": "沟通协作能力", "description": "能与..."}
+    ]
+  },
+  
+  "learning_domains": [
+    {
+      "id": "LD001",
+      "name": "网络设备配置与管理",
+      "reference_hours": 72,
+      "learning_objective": "掌握常见网络设备的基本配置方法",
+      "learning_content": "路由器配置、交换机配置、VLAN配置",
+      "related_action_domain": "AD001",
+      "methods": ["项目教学法", "任务驱动法"],
+      "assessment": ["过程评价", "成果评价"]
+    }
+  ],
+  
+  "learning_situations": [
+    {
+      "id": "S001",
+      "name": "小型办公网络设备配置",
+      "domain_id": "LD001",
+      "hours": 24,
+      "learning_objective": "能独立完成小型办公网络设备的安装、配置和调试",
+      "learning_content": "网络拓扑设计、设备选型、路由器配置、交换机配置",
+      "teaching_method": "项目教学法",
+      "evaluation_method": "过程评价（40%）+成果评价（60%）"
+    }
+  ],
+  
+  "metadata": {
+    "education_level": "中等职业教育",
+    "major_code": "710202",
+    "major_name": "计算机网络技术",
+    "created_date": "2026-04-05",
+    "version": "1.0"
+  }
+}

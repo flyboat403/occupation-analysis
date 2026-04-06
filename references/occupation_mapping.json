@@ -1,0 +1,502 @@
+{
+  "occupation_mapping": [
+    {
+      "china_code": "4-12-02",
+      "china_name": "汽车维修技术人员",
+      "isco_code": "7231",
+      "isco_name": "Motor vehicle mechanics and repairers",
+      "onet_code": "49-3023.00",
+      "onet_name": "Automotive Service Technicians and Mechanics",
+      "confidence": "high"
+    },
+    {
+      "china_code": "4-12-02-01",
+      "china_name": "汽车机械维修工",
+      "isco_code": "7231",
+      "isco_name": "Motor vehicle mechanics and repairers",
+      "onet_code": "49-3023.00",
+      "onet_name": "Automotive Service Technicians and Mechanics",
+      "confidence": "high"
+    },
+    {
+      "china_code": "4-12-02-04",
+      "china_name": "新能源汽车维修工",
+      "isco_code": "7231",
+      "isco_name": "Motor vehicle mechanics and repairers",
+      "onet_code": "49-3023.00",
+      "onet_name": "Automotive Service Technicians and Mechanics",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "4-12-03",
+      "china_name": "汽车售后服务人员",
+      "isco_code": "4221",
+      "isco_name": "Client information workers",
+      "onet_code": "43-4051.00",
+      "onet_name": "Customer Service Representatives",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "2-05-05",
+      "china_name": "计算机软件工程技术人员",
+      "isco_code": "2512",
+      "isco_name": "Software developers",
+      "onet_code": "15-1252.00",
+      "onet_name": "Software Developers",
+      "confidence": "high"
+    },
+    {
+      "china_code": "2-05-06",
+      "china_name": "计算机网络工程技术人员",
+      "isco_code": "2631",
+      "isco_name": "Computer network and systems administrators",
+      "onet_code": "15-1244.00",
+      "onet_name": "Network and Computer Systems Administrators",
+      "confidence": "high"
+    },
+    {
+      "china_code": "2-05-07",
+      "china_name": "计算机硬件工程技术人员",
+      "isco_code": "2521",
+      "isco_name": "Database designers and administrators",
+      "onet_code": "15-1299.00",
+      "onet_name": "Computer Occupations, All Other",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "2-05-10",
+      "china_name": "大数据工程技术人员",
+      "isco_code": "2512",
+      "isco_name": "Software developers",
+      "onet_code": "15-2051.00",
+      "onet_name": "Data Scientists",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "2-05-11",
+      "china_name": "云计算工程技术人员",
+      "isco_code": "2512",
+      "isco_name": "Software developers",
+      "onet_code": "15-1244.00",
+      "onet_name": "Network and Computer Systems Administrators",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "2-06-03",
+      "china_name": "会计专业人员",
+      "isco_code": "2411",
+      "isco_name": "Accountants",
+      "onet_code": "13-2011.00",
+      "onet_name": "Accountants and Auditors",
+      "confidence": "high"
+    },
+    {
+      "china_code": "2-06-04",
+      "china_name": "审计专业人员",
+      "isco_code": "2411",
+      "isco_name": "Accountants",
+      "onet_code": "13-2011.00",
+      "onet_name": "Accountants and Auditors",
+      "confidence": "high"
+    },
+    {
+      "china_code": "2-06-05",
+      "china_name": "税务专业人员",
+      "isco_code": "2411",
+      "isco_name": "Accountants",
+      "onet_code": "13-2011.00",
+      "onet_name": "Accountants and Auditors",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "4-01-02",
+      "china_name": "会计人员",
+      "isco_code": "3311",
+      "isco_name": "Accounting clerks",
+      "onet_code": "43-3031.00",
+      "onet_name": "Bookkeeping, Accounting, and Auditing Clerks",
+      "confidence": "high"
+    },
+    {
+      "china_code": "4-01-05",
+      "china_name": "营销员",
+      "isco_code": "3322",
+      "isco_name": "Advertising and public relations clerks",
+      "onet_code": "41-1011.00",
+      "onet_name": "First-Line Supervisors of Retail Sales Workers",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "2-06-07",
+      "china_name": "银行专业人员",
+      "isco_code": "2412",
+      "isco_name": "Financial and investment advisers",
+      "onet_code": "13-2052.00",
+      "onet_name": "Personal Financial Advisors",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "2-06-08",
+      "china_name": "保险专业人员",
+      "isco_code": "3321",
+      "isco_name": "Insurance representatives",
+      "onet_code": "13-2053.00",
+      "onet_name": "Insurance Underwriters",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "2-05-03",
+      "china_name": "电子商务技术人员",
+      "isco_code": "2512",
+      "isco_name": "Software developers",
+      "onet_code": "15-1255.00",
+      "onet_name": "Web and Digital Interface Designers",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "2-08-05",
+      "china_name": "物流工程技术人员",
+      "isco_code": "1324",
+      "isco_name": "Supply, distribution and related managers",
+      "onet_code": "11-3071.00",
+      "onet_name": "Transportation, Storage, and Distribution Managers",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "4-02-03",
+      "china_name": "仓储人员",
+      "isco_code": "4321",
+      "isco_name": "Storekeepers",
+      "onet_code": "43-5071.00",
+      "onet_name": "Shipping, Receiving, and Inventory Clerks",
+      "confidence": "high"
+    },
+    {
+      "china_code": "2-10-01",
+      "china_name": "临床医师",
+      "isco_code": "2211",
+      "isco_name": "Generalist medical practitioners",
+      "onet_code": "29-1062.00",
+      "onet_name": "Family and General Practitioners",
+      "confidence": "high"
+    },
+    {
+      "china_code": "2-10-02",
+      "china_name": "中医医师",
+      "isco_code": "2230",
+      "isco_name": "Nursing and midwifery professionals",
+      "onet_code": "29-1161.00",
+      "onet_name": "Nurse Midwives",
+      "confidence": "low"
+    },
+    {
+      "china_code": "2-10-03",
+      "china_name": "口腔医师",
+      "isco_code": "2261",
+      "isco_name": "Dentists",
+      "onet_code": "29-1021.00",
+      "onet_name": "Dentists, General",
+      "confidence": "high"
+    },
+    {
+      "china_code": "2-10-05",
+      "china_name": "公共卫生医师",
+      "isco_code": "2212",
+      "isco_name": "Specialist medical practitioners",
+      "onet_code": "29-9091.00",
+      "onet_name": "Healthcare Practitioners and Technical Workers",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "2-10-07",
+      "china_name": "护理人员",
+      "isco_code": "2221",
+      "isco_name": "Nursing professionals",
+      "onet_code": "29-1141.00",
+      "onet_name": "Registered Nurses",
+      "confidence": "high"
+    },
+    {
+      "china_code": "2-10-08",
+      "china_name": "药学技术人员",
+      "isco_code": "2262",
+      "isco_name": "Pharmacists",
+      "onet_code": "29-1051.00",
+      "onet_name": "Pharmacists",
+      "confidence": "high"
+    },
+    {
+      "china_code": "2-10-09",
+      "china_name": "医学影像技术人员",
+      "isco_code": "3213",
+      "isco_name": "Medical imaging and therapeutic equipment technicians",
+      "onet_code": "29-2034.00",
+      "onet_name": "Radiologic Technologists and Technicians",
+      "confidence": "high"
+    },
+    {
+      "china_code": "2-10-10",
+      "china_name": "康复技术人员",
+      "isco_code": "2264",
+      "isco_name": "Physiotherapists",
+      "onet_code": "29-1123.00",
+      "onet_name": "Physical Therapists",
+      "confidence": "high"
+    },
+    {
+      "china_code": "4-14-01",
+      "china_name": "养老护理员",
+      "isco_code": "5321",
+      "isco_name": "Health care assistants",
+      "onet_code": "31-1122.00",
+      "onet_name": "Personal Care Aides",
+      "confidence": "high"
+    },
+    {
+      "china_code": "2-01-04",
+      "china_name": "建筑工程技术人员",
+      "isco_code": "2151",
+      "isco_name": "Architects",
+      "onet_code": "17-1011.00",
+      "onet_name": "Architects, Except Landscape and Naval",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "2-01-05",
+      "china_name": "土木建筑工程技术人员",
+      "isco_code": "2153",
+      "isco_name": "Civil engineers",
+      "onet_code": "17-2051.00",
+      "onet_name": "Civil Engineers",
+      "confidence": "high"
+    },
+    {
+      "china_code": "2-01-06",
+      "china_name": "建筑安装工程技术人员",
+      "isco_code": "2153",
+      "isco_name": "Civil engineers",
+      "onet_code": "17-2051.00",
+      "onet_name": "Civil Engineers",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "6-29-02",
+      "china_name": "砌筑工",
+      "isco_code": "7112",
+      "isco_name": "Bricklayers and related workers",
+      "onet_code": "47-2021.00",
+      "onet_name": "Brickmasons and Blockmasons",
+      "confidence": "high"
+    },
+    {
+      "china_code": "6-29-03",
+      "china_name": "混凝土工",
+      "isco_code": "7114",
+      "isco_name": "Building frame and related trades workers",
+      "onet_code": "47-2051.00",
+      "onet_name": "Cement Masons and Concrete Finishers",
+      "confidence": "high"
+    },
+    {
+      "china_code": "6-29-04",
+      "china_name": "钢筋工",
+      "isco_code": "7114",
+      "isco_name": "Building frame and related trades workers",
+      "onet_code": "47-2171.00",
+      "onet_name": "Reinforcing Iron and Rebar Workers",
+      "confidence": "high"
+    },
+    {
+      "china_code": "2-02-01",
+      "china_name": "教学人员",
+      "isco_code": "2330",
+      "isco_name": "Secondary education teachers",
+      "onet_code": "25-2031.00",
+      "onet_name": "Secondary School Teachers",
+      "confidence": "high"
+    },
+    {
+      "china_code": "2-02-02",
+      "china_name": "幼儿教育教师",
+      "isco_code": "2342",
+      "isco_name": "Primary school teachers",
+      "onet_code": "25-2011.00",
+      "onet_name": "Preschool Teachers",
+      "confidence": "high"
+    },
+    {
+      "china_code": "2-02-03",
+      "china_name": "中等职业教育教师",
+      "isco_code": "2330",
+      "isco_name": "Secondary education teachers",
+      "onet_code": "25-2031.00",
+      "onet_name": "Secondary School Teachers",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "2-02-06",
+      "china_name": "特殊教育教师",
+      "isco_code": "2351",
+      "isco_name": "Special education teachers",
+      "onet_code": "25-2051.00",
+      "onet_name": "Special Education Teachers",
+      "confidence": "high"
+    },
+    {
+      "china_code": "4-03-01",
+      "china_name": "中式烹调师",
+      "isco_code": "5120",
+      "isco_name": "Cooks",
+      "onet_code": "35-2014.00",
+      "onet_name": "Cooks, Restaurant",
+      "confidence": "high"
+    },
+    {
+      "china_code": "4-03-02",
+      "china_name": "中式面点师",
+      "isco_code": "5120",
+      "isco_name": "Cooks",
+      "onet_code": "35-2014.00",
+      "onet_name": "Cooks, Restaurant",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "4-03-03",
+      "china_name": "西式烹调师",
+      "isco_code": "5120",
+      "isco_name": "Cooks",
+      "onet_code": "35-2014.00",
+      "onet_name": "Cooks, Restaurant",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "4-04-01",
+      "china_name": "前厅服务员",
+      "isco_code": "4221",
+      "isco_name": "Client information workers",
+      "onet_code": "43-4171.00",
+      "onet_name": "Receptionists and Information Clerks",
+      "confidence": "high"
+    },
+    {
+      "china_code": "4-04-02",
+      "china_name": "客房服务员",
+      "isco_code": "5112",
+      "isco_name": "Waiters",
+      "onet_code": "35-9031.00",
+      "onet_name": "Hosts and Hostesses, Restaurant, Lounge, and Coffee Shop",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "4-04-03",
+      "china_name": "导游",
+      "isco_code": "5111",
+      "isco_name": "Travel attendants and travel guides",
+      "onet_code": "39-7011.00",
+      "onet_name": "Tour Guides and Escorts",
+      "confidence": "high"
+    },
+    {
+      "china_code": "4-10-01",
+      "china_name": "农机操作工",
+      "isco_code": "9211",
+      "isco_name": "Agricultural, forestry and fishery labourers",
+      "onet_code": "45-2092.00",
+      "onet_name": "Farm Equipment Operators",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "4-10-02",
+      "china_name": "农业技术人员",
+      "isco_code": "2131",
+      "isco_name": "Agronomists and related scientists",
+      "onet_code": "19-1013.00",
+      "onet_name": "Soil and Plant Scientists",
+      "confidence": "medium"
+    },
+    {
+      "china_code": "6-24-01",
+      "china_name": "数控车工",
+      "isco_code": "7223",
+      "isco_name": "Metal working machine tool setters and operators",
+      "onet_code": "51-4031.00",
+      "onet_name": "Cutting Machine Operators",
+      "confidence": "high"
+    },
+    {
+      "china_code": "6-24-02",
+      "china_name": "数控铣工",
+      "isco_code": "7223",
+      "isco_name": "Metal working machine tool setters and operators",
+      "onet_code": "51-4031.00",
+      "onet_name": "Cutting Machine Operators",
+      "confidence": "high"
+    },
+    {
+      "china_code": "6-24-04",
+      "china_name": "焊工",
+      "isco_code": "7212",
+      "isco_name": "Welders and flame cutters",
+      "onet_code": "51-4121.00",
+      "onet_name": "Welders, Cutters, and Welder Fitters",
+      "confidence": "high"
+    },
+    {
+      "china_code": "6-24-05",
+      "china_name": "钳工",
+      "isco_code": "7222",
+      "isco_name": "Metal moulders and welders, and related workers",
+      "onet_code": "51-4032.00",
+      "onet_name": "Drilling and Boring Machine Tool Setters, Operators",
+      "confidence": "high"
+    },
+    {
+      "china_code": "6-26-01",
+      "china_name": "电工",
+      "isco_code": "7421",
+      "isco_name": "Electrical mechanics and fitters",
+      "onet_code": "49-2092.00",
+      "onet_name": "Electric Motor, Power Tool, and Related Repairers",
+      "confidence": "high"
+    },
+    {
+      "china_code": "6-31-01",
+      "china_name": "电子设备装接工",
+      "isco_code": "7422",
+      "isco_name": "Electronics mechanics and fitters",
+      "onet_code": "49-2094.00",
+      "onet_name": "Electrical and Electronics Repairers, Commercial Equipment",
+      "confidence": "high"
+    }
+  ],
+  "mapping_rules": {
+    "description": "职业代码对照规则说明",
+    "china_code_format": "X-XX-XX 或 X-XX-XX-XX",
+    "isco_code_format": "四位数字（ISCO-08标准）",
+    "onet_code_format": "XX-XXXX.XX（SOC标准）",
+    "confidence_levels": {
+      "high": "精确映射，名称和职责高度匹配",
+      "medium": "部分映射，名称相近但职责有差异",
+      "low": "参考映射，仅作参考使用"
+    },
+    "notes": [
+      "中国职业大典使用6位或8位代码",
+      "ESCO基于ISCO-08标准，使用4位代码",
+      "O*NET基于SOC标准，使用XX-XXXX.XX格式",
+      "同一职业在不同分类体系中可能对应多个代码",
+      "confidence字段表示映射置信度，建议优先使用high级别映射"
+    ]
+  },
+  "search_keywords": {
+    "automotive": ["汽车", "automotive", "motor vehicle", "car", "vehicle maintenance"],
+    "accounting": ["会计", "审计", "accounting", "accountant", "auditor", "financial"],
+    "software": ["软件", "开发", "software", "developer", "programmer"],
+    "nursing": ["护理", "护士", "nursing", "nurse", "healthcare"],
+    "construction": ["建筑", "施工", "construction", "building", "civil engineering"],
+    "education": ["教师", "教学", "teacher", "education", "teaching"],
+    "tourism": ["旅游", "导游", "tourism", "tour guide", "hospitality"],
+    "manufacturing": ["制造", "加工", "manufacturing", "machining", "welding"]
+  },
+  "last_updated": "2026-04-04",
+  "total_mappings": 51
+}
