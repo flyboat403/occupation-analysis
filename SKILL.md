@@ -205,7 +205,7 @@ dependency:
 │         - 若文档缺失 → 警告并等待用户确认后继续                                   │
 │         → international_data.json                                                │
 │                                                                                  │
-│  步骤6: 整合基础数据        → 手动合并              → base_data.json              │
+│  步骤6: 整合基础数据        → integrate_data.py      → combined_data.md            │
 └──────────────────────────────────────────────────────────────────────────────────┘
                                        │
                                        ▼
@@ -283,7 +283,7 @@ dependency:
 | **3** | **大模型+用户** | 用户确认 | 确认后的occupation_info.json |
 | **4** | **大模型** | ESCO/O*NET映射推断 | occupation_mapping_info.json |
 | 5 | Python脚本 | 本地文档查询 | international_data.json |
-| 6 | Python脚本 | 数据合并 | base_data.json |
+| 6 | Python脚本 | 数据合并 | combined_data.md |
 | 7-14 | **大模型自身** | 语义分析与生成 | analysis_data.json |
 | 15 | Python脚本 | 格式化输出 | report.md |
 | 16-17 | **大模型自身** | 质量校验与修复 | 最终报告 |
@@ -532,15 +532,37 @@ python scripts/fetch_local.py \
 
 ### 步骤6：整合基础数据
 
-将以上JSON文件合并为 `base_data.json`，供大模型分析使用。
+将以上JSON文件合并为 `combined_data.md`（Markdown格式），供大模型分析使用。
 
-```json
-{
-  "major_info": { ... },
-  "occupation_info": { ... },
-  "occupation_mapping_info": { ... },
-  "international_data": { ... }
-}
+```bash
+python scripts/integrate_data.py \
+  --major temp/major_info.json \
+  --occupation temp/occupation_info.json \
+  --mapping temp/occupation_mapping_info.json \
+  --international temp/international_data.json \
+  --output temp/combined_data.md
+```
+
+**输出格式**：
+```markdown
+---
+生成时间: 2026-04-06 15:56:26
+数据格式: Markdown
+---
+
+# 专业教学标准
+- 专业代码：740202
+- 专业名称：西餐烹饪
+...
+
+# 职业信息
+## 职业1：西式烹调师
+- 职业代码：4-03-02-03
+...
+
+# 国际职业数据
+## ESCO数据
+...
 ```
 
 ---
@@ -548,6 +570,8 @@ python scripts/fetch_local.py \
 ## 阶段二：语义分析与生成（大模型自身执行）
 
 > Agent/大模型基于阶段一获取的数据，进行语义理解、分析推理、创造性生成。
+
+**输入文件**：`temp/combined_data.md`（包含专业教学标准、职业信息、国际职业数据）
 
 ### 步骤7：职业面向语义解析
 

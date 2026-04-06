@@ -30,6 +30,77 @@ INTERNATIONAL_DATA_DIR = "temp/international_data"
 OCCUPATIONS_DIR = f"{INTERNATIONAL_DATA_DIR}/occupations"
 
 
+def json_to_md(data: Dict, section_name: str) -> str:
+    """将JSON数据转换为Markdown格式
+    
+    Args:
+        data: JSON数据字典
+        section_name: 章节名称
+    
+    Returns:
+        Markdown格式字符串
+    """
+    lines = [f"# {section_name}", ""]
+    
+    def format_value(value, indent=0):
+        """递归格式化值为Markdown"""
+        nonlocal lines
+        prefix = "  " * indent
+        
+        if isinstance(value, dict):
+            for k, v in value.items():
+                if isinstance(v, (dict, list)) and v:
+                    lines.append(f"{prefix}## {k}")
+                    format_value(v, indent)
+                    lines.append("")
+                elif isinstance(v, list) and not v:
+                    lines.append(f"{prefix}- {k}: （空）")
+                elif isinstance(v, dict) and not v:
+                    lines.append(f"{prefix}- {k}: （空）")
+                else:
+                    format_value(v, indent)
+        elif isinstance(value, list):
+            for i, item in enumerate(value, 1):
+                if isinstance(item, dict):
+                    lines.append(f"{prefix}### 项目 {i}")
+                    format_value(item, indent + 1)
+                    lines.append("")
+                else:
+                    lines.append(f"{prefix}{i}. {item}")
+        elif isinstance(value, str):
+            if '\n' in value:
+                lines.append(f"{prefix}- {value[:100]}...")
+            else:
+                lines.append(f"{prefix}- {value}")
+        else:
+            lines.append(f"{prefix}- {value}")
+    
+    format_value(data)
+    return "\n".join(lines)
+
+
+def validate_combined_data(md_content: str) -> None:
+    """验证MD文档包含必需章节
+    
+    Args:
+        md_content: MD文档内容
+    
+    Raises:
+        ValueError: 缺少必需章节时抛出异常
+    """
+    required_sections = ["# 专业教学标准", "# 职业信息"]
+    
+    missing = []
+    for section in required_sections:
+        if section not in md_content:
+            missing.append(section)
+    
+    if missing:
+        raise ValueError(f"MD文档缺少必需章节: {', '.join(missing)}")
+    
+    print("[OK] 数据完整性验证通过")
+
+
 def load_json(file_path: Path) -> Dict:
     """
     加载JSON文件
@@ -448,20 +519,20 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例（推荐格式）:
-    # 使用SKILL.md描述的参数格式
+    # 使用SKILL.md描述的参数格式（输出为MD格式）
     python scripts/integrate_data.py \
         --major temp/major_info.json \
         --occupation temp/occupation_info.json \
         --mapping temp/occupation_mapping_info.json \
         --international temp/international_data.json \
-        --output temp/base_data.json
+        --output temp/combined_data.md
 
 示例（旧格式，兼容）:
     python scripts/integrate_data.py \
         --china temp/occupation_info.json \
         --esco temp/esco_data.json \
         --onet temp/onet_data.json \
-        --output temp/integrated_data.json
+        --output temp/integrated_data.md
         """
     )
     
@@ -488,46 +559,60 @@ def main():
     
     # 新参数格式：整合所有基础数据
     if args.major or args.occupation or args.mapping or args.international:
-        base_data = {
-            "major_info": {},
-            "occupation_info": {},
-            "occupation_mapping_info": {},
-            "international_data": {},
-            "generated_at": datetime.now().isoformat()
-        }
+        sections = []
         
         if args.major:
             major_path = project_root / args.major if not Path(args.major).is_absolute() else Path(args.major)
-            base_data["major_info"] = load_json(major_path)
-            print(f"[OK] 加载专业教学标准: {major_path}")
+            major_data = load_json(major_path)
+            if major_data:
+                sections.append(json_to_md(major_data, "专业教学标准"))
+                print(f"[OK] 加载专业教学标准: {major_path}")
         
         if args.occupation:
             occ_path = project_root / args.occupation if not Path(args.occupation).is_absolute() else Path(args.occupation)
-            base_data["occupation_info"] = load_json(occ_path)
-            print(f"[OK] 加载职业信息: {occ_path}")
+            occ_data = load_json(occ_path)
+            if occ_data:
+                sections.append(json_to_md(occ_data, "职业信息"))
+                print(f"[OK] 加载职业信息: {occ_path}")
         
         if args.mapping:
             map_path = project_root / args.mapping if not Path(args.mapping).is_absolute() else Path(args.mapping)
-            base_data["occupation_mapping_info"] = load_json(map_path)
-            print(f"[OK] 加载映射信息: {map_path}")
+            map_data = load_json(map_path)
+            if map_data:
+                sections.append(json_to_md(map_data, "职业映射信息"))
+                print(f"[OK] 加载映射信息: {map_path}")
         
         if args.international:
             int_path = project_root / args.international if not Path(args.international).is_absolute() else Path(args.international)
-            base_data["international_data"] = load_json(int_path)
-            print(f"[OK] 加载国际数据: {int_path}")
+            int_data = load_json(int_path)
+            if int_data:
+                sections.append(json_to_md(int_data, "国际职业数据"))
+                print(f"[OK] 加载国际数据: {int_path}")
         
-        # 保存输出
+        # 添加元数据
+        metadata = f"""---
+生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+数据格式: Markdown
+---"""
+        
+        # 合并所有章节
+        combined_md = metadata + "\n\n" + "\n\n---\n\n".join(sections)
+        
+        # 验证数据完整性
+        validate_combined_data(combined_md)
+        
+        # 保存输出（自动改为.md后缀）
         output_path = project_root / args.output if not Path(args.output).is_absolute() else Path(args.output)
+        if output_path.suffix == '.json':
+            output_path = output_path.with_suffix('.md')
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
         with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(base_data, f, ensure_ascii=False, indent=2)
+            f.write(combined_md)
         
         print(f"\n[OK] 基础数据已整合到: {output_path}")
-        print(f"     - 专业信息: {len(base_data['major_info'].get('results', []))} 条")
-        print(f"     - 职业信息: {len(base_data['occupation_info'].get('occupations', []))} 个职业")
-        print(f"     - 映射信息: {len(base_data['occupation_mapping_info'].get('mapping_results', []))} 条")
-        print(f"     - 国际数据: {len(base_data['international_data'].get('occupations', []))} 个职业")
+        print(f"     - 章节数量: {len(sections)}")
+        print(f"     - 文件大小: {len(combined_md)} 字符")
         return
     
     # 旧参数格式：兼容处理
