@@ -159,7 +159,16 @@ def search_major(
                         result['pdf_parse_error'] = "无PDF URL"
                 
         except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"[WARNING] 主数据源加载失败: {e}")
+            error_msg = f"主数据源加载失败: {e}"
+            print(f"[ERROR] {error_msg}")
+            return {
+                "query": query,
+                "level": level,
+                "total": 0,
+                "results": [],
+                "error": error_msg,
+                "data_source": "failed"
+            }
     
     # 备用数据源检索（仅当主数据源未找到时）
     if not results and use_fallback:

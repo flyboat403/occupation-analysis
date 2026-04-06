@@ -14,9 +14,77 @@
 
 import json
 import argparse
+import re
 from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
+
+
+# ==================== 常量定义 ====================
+
+# 能力编号前缀
+ABILITY_CODE_PREFIX = {
+    'professional': 'Z',
+    'methodological': 'F',
+    'social': 'S'
+}
+
+# 能力类型名称
+ABILITY_TYPE_NAMES = {
+    'professional': '专业能力',
+    'methodological': '方法能力',
+    'social': '社会能力'
+}
+
+# 教育层次禁止动词
+EDUCATION_LEVEL_FORBIDDEN_VERBS = {
+    '中职': ['设计', '优化', '创新', '管理', '分析', '诊断'],
+    '高职': ['研发', '创新', '管理'],
+    '职教本科': []
+}
+
+# 教育层次允许动词
+EDUCATION_LEVEL_ALLOWED_VERBS = {
+    '中职': ['操作', '执行', '完成', '使用', '识别', '检测'],
+    '高职': ['检测', '诊断', '分析', '维护', '维修', '优化'],
+    '职教本科': ['设计', '优化', '管理', '创新']
+}
+
+
+def normalize_task_fields(task: Dict) -> Dict:
+    """标准化任务字段名（支持 name 和 task_name 两种字段名）"""
+    if 'task_name' in task and 'name' not in task:
+        task['name'] = task['task_name']
+    return task
+
+
+def check_ability_verb_compliance(text: str, education_level: str) -> List[str]:
+    """检查能力描述是否符合教育层次要求
+    
+    Args:
+        text: 能力描述文本
+        education_level: 教育层次（中职/高职/职教本科）
+    
+    Returns:
+        发现的禁止动词列表
+    """
+    violations = []
+    level_key = None
+    
+    if '中职' in education_level or '中等职业教育' in education_level:
+        level_key = '中职'
+    elif '高职' in education_level or '高等职业教育' in education_level:
+        level_key = '高职'
+    elif '职教本科' in education_level or '职业教育本科' in education_level:
+        level_key = '职教本科'
+    
+    if level_key:
+        forbidden = EDUCATION_LEVEL_FORBIDDEN_VERBS.get(level_key, [])
+        for verb in forbidden:
+            if verb in text:
+                violations.append(verb)
+    
+    return violations
 
 
 def load_analysis_data(data_path: Path) -> Dict:
@@ -51,7 +119,8 @@ def validate_data_structure(data: Dict) -> None:
         warnings.append("缺少 typical_tasks 字段，表2-3将为空")
     else:
         for i, task in enumerate(data['typical_tasks']):
-            if 'name' not in task and 'task_name' not in task:
+            normalize_task_fields(task)
+            if 'name' not in task:
                 warnings.append(f"typical_tasks[{i}] 缺少 name 字段")
     
     # 检查 action_domains 结构
@@ -89,6 +158,30 @@ def validate_data_structure(data: Dict) -> None:
         for warn in warnings:
             print(f"  [WARN] {warn}")
         print("[HINT] 部分表格内容可能为空，建议补充缺失字段\n")
+
+
+def extract_ability_names(ability_list: List) -> List[str]:
+    """从能力列表中提取名称（支持字符串和字典格式）
+    
+    Args:
+        ability_list: 能力列表，元素可以是字符串或字典
+    
+    Returns:
+        能力名称列表
+    """
+    names = []
+    if not ability_list:
+        return names
+    
+    for item in ability_list:
+        if isinstance(item, dict):
+            name = item.get('name', item.get('description', ''))
+            if name:
+                names.append(name)
+        elif isinstance(item, str):
+            names.append(item)
+    
+    return names
 
 
 def generate_markdown_table(headers: List[str], rows: List[List[str]]) -> str:

@@ -117,9 +117,12 @@ class LocalDocumentFetcher:
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return f.read()
-        except Exception as e:
+        except (IOError, OSError, UnicodeDecodeError, PermissionError) as e:
             print(f"[ERROR] 读取文件失败 {file_path}: {e}")
             return None
+        except Exception as e:
+            print(f"[ERROR] 未知错误读取文件 {file_path}: {e}")
+            raise
     
     def parse_esco_content(self, content: str) -> Dict:
         """解析ESCO文档内容"""

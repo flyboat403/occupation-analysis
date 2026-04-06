@@ -426,15 +426,20 @@ def integrate_data(
         print(f"[OK] 国际数据已保存到: {INTERNATIONAL_DATA_DIR}/occupations/{occupation_code}_*.json")
     
     # 保存输出（带错误处理）
+    save_success = False
     try:
         output_full_path = project_root / output_path
         output_full_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_full_path, 'w', encoding='utf-8') as f:
             json.dump(integrated, f, ensure_ascii=False, indent=2)
         print(f"[OK] 整合数据已保存到: {output_full_path}")
+        save_success = True
     except IOError as e:
-        print(f"[ERROR] 保存文件失败: {e}")
+        error_msg = f"保存文件失败: {e}"
+        print(f"[ERROR] {error_msg}")
+        integrated['save_error'] = error_msg
     
+    integrated['save_success'] = save_success
     return integrated
 
 def main():
