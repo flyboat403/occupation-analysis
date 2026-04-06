@@ -129,12 +129,11 @@ def validate_data_structure(data: Dict) -> None:
             if 'name' not in domain:
                 errors.append(f"action_domains[{i}] 缺少 name 字段")
             if 'tasks' not in domain:
-                warnings.append(f"action_domains[{i}] 缺少 tasks 字段")
+                errors.append(f"action_domains[{i}] 缺少 tasks 字段（必需）")
             
-            # 检查 abilities 结构（可选但建议有）
             abilities = domain.get('abilities', {})
             if not abilities:
-                warnings.append(f"action_domains[{i}] 缺少 abilities 字段，表6-8将为空")
+                errors.append(f"action_domains[{i}] 缺少 abilities 字段（必需，影响表6-8）")
     
     # 检查 learning_domains 结构
     if 'learning_domains' in data:
@@ -142,9 +141,9 @@ def validate_data_structure(data: Dict) -> None:
             if 'name' not in course:
                 errors.append(f"learning_domains[{i}] 缺少 name 字段")
             if 'methods' not in course:
-                warnings.append(f"learning_domains[{i}] 缺少 methods 字段，表10教学方法将为空")
+                errors.append(f"learning_domains[{i}] 缺少 methods 字段（必需，影响表10）")
             if 'assessment' not in course:
-                warnings.append(f"learning_domains[{i}] 缺少 assessment 字段，表10评价方式将为空")
+                errors.append(f"learning_domains[{i}] 缺少 assessment 字段（必需，影响表10）")
     
     # 输出校验结果
     if errors:

@@ -681,6 +681,17 @@ python scripts/fetch_local.py \
 | `learning_situations` | Array | 学习情境列表 |
 | `metadata` | Object | 元数据（教育层次、日期等） |
 
+**⚠️ 子字段约束（必须包含，否则报告生成失败）**：
+
+| 父字段 | 必需子字段 | 影响 |
+|--------|-----------|------|
+| `action_domains[i]` | `tasks` | 表4典型任务覆盖验证失败 |
+| `action_domains[i]` | `abilities` | 表6-8能力分析表格为空 |
+| `learning_domains[i]` | `methods` | 表10教学方法为空 |
+| `learning_domains[i]` | `assessment` | 表10评价方式为空 |
+
+> **验证机制**：`generate_report.py` 会在数据结构不完整时抛出错误并终止，要求修复 `analysis_data.json`
+
 ---
 
 ## 阶段三：格式化输出（Python脚本执行）
