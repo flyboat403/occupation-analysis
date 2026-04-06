@@ -701,8 +701,26 @@ def generate_report(data: Dict) -> str:
     sections.append("## 附录\n")
     sections.append("### 职业面向\n")
     
+    # 从major_info获取职业面向描述
+    career_orientation = major_info.get('career_orientation', '')
+    if career_orientation:
+        sections.append(f"{career_orientation}\n\n")
+    
+    # 展示职业列表
+    occupations = data.get('occupations', [])
+    if occupations:
+        sections.append("**职业列表**：\n")
+        for occ in occupations:
+            occ_name = occ.get('name', '')
+            occ_code = occ.get('code', '')
+            if occ_name:
+                sections.append(f"- {occ_name}（{occ_code}）\n")
+        sections.append("\n")
+    
+    # 展示国际职业代码映射
     occupation_mapping = data.get('occupation_mapping', [])
     if occupation_mapping:
+        sections.append("\n**国际职业代码映射**：\n\n")
         headers = ["中国职业代码", "职业名称", "ISCO代码", "O*NET代码"]
         rows = []
         for mapping in occupation_mapping:
