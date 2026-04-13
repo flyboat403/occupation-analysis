@@ -347,40 +347,6 @@ class IMAKnowledgeClient:
             ],
             'knowledge_base_name': knowledge_base
         }
-        # 查找知识库笔记本
-        notebook = self.find_knowledge_base(knowledge_base)
-        
-        if not notebook:
-            print(f"未找到 {knowledge_base} 知识库笔记本")
-            return None
-        
-        print(f"找到知识库: {notebook['name']}")
-        
-        # 搜索职业
-        notes = self.search_notes(occupation_name, search_type=1)  # 正文检索
-        
-        if not notes:
-            print(f"在 {knowledge_base} 知识库中未找到 '{occupation_name}' 相关笔记")
-            return None
-        
-        print(f"找到 {len(notes)} 条相关笔记")
-        
-        # 获取最相关的笔记内容
-        first_note = notes[0]
-        print(f"读取笔记: {first_note['title']}")
-        
-        content = self.get_note_content(first_note['doc_id'])
-        
-        if content:
-            return {
-                'source': f'IMA-{knowledge_base}',
-                'doc_id': first_note['doc_id'],
-                'title': first_note['title'],
-                'content': content,
-                'raw': first_note
-            }
-        
-        return None
 
 def fetch_esco_api(occupation_name: str) -> Optional[Dict]:
     """

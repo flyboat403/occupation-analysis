@@ -17,10 +17,17 @@
 """
 
 import json
+import re
 import argparse
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from major_catalog_mapper import get_catalog, get_category_from_major_code, get_md_file_path
+
+try:
+    import openpyxl
+    HAS_OPENPYXL = True
+except ImportError:
+    HAS_OPENPYXL = False
 
 def load_major_data(json_path: Path) -> List[Dict]:
     """
@@ -63,9 +70,20 @@ def search_by_name(data: List[Dict], name: str) -> List[Dict]:
 def search_by_level(data: List[Dict], level: str) -> List[Dict]:
     """按教育层次筛选"""
     results = []
+    
+    level_aliases = {
+        '中职': ['中等职业教育', '中职学校', '中职教育', '职高', '中专', '技校'],
+        '高职': ['高等职业教育', '高职专科', '专科','高职院校'],
+        '职教本科': ['职业教育本科', '职教本科', '本科']
+    }
+    
+    aliases = level_aliases.get(level, [level])
+    
     for item in data:
-        if level in item.get('education_level', ''):
+        edu_level = item.get('education_level', '')
+        if any(alias in edu_level for alias in aliases):
             results.append(item)
+    
     return results
 
 def search_major(
@@ -352,20 +370,17 @@ def parse_md_file(md_path: Path, target_code: str) -> Optional[Dict]:
         with open(md_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        import re
-        
         result = {
             'major_code': target_code,
             'major_name': '',
             'education_level': '',
             'career_orientation': '',
             'training_goal': '',
+            'raw_text': '',
             'source_file': str(md_path.name),
             'pdf_url': ''
         }
         
-        # 找到目标专业的范围（从专业代码到下一个专业代码或文件末尾）
-        # 使用非贪婪匹配找到当前专业的所有内容
         major_section_pattern = rf'专业代码\s+{target_code}\s*\n(.*?)(?=专业代码\s+\d{{6}}|$)'
         major_match = re.search(major_section_pattern, content, re.DOTALL)
         
@@ -373,6 +388,8 @@ def parse_md_file(md_path: Path, target_code: str) -> Optional[Dict]:
             return result
         
         major_section = major_match.group(1)
+        
+        result['raw_text'] = re.sub(r'\n{3,}', '\n\n', major_section.strip())
         
         # 提取专业名称
         name_match = re.search(r'专业名称\s+([^\n]+)', major_section)
@@ -382,14 +399,12 @@ def parse_md_file(md_path: Path, target_code: str) -> Optional[Dict]:
         # 提取职业面向（# 职业面向 和下一个 # 标题之间的内容）
         orientation_match = re.search(r'# 职业面向\s*\n+(.*?)(?=\n# |\Z)', major_section, re.DOTALL)
         if orientation_match:
-            result['career_orientation'] = orientation_match.group(1).strip()[:500]
+            result['career_orientation'] = orientation_match.group(1).strip()
         
-        # 提取培养目标定位
-        goal_match = re.search(r'# 培养目标定位\s*\n+(.*?)(?=\n# |\Z)', major_section, re.DOTALL)
+        goal_match = re.search(r'培养目标[：:\s]*\n?(.*?)(?=\n\s*\n|\n#|\n二、|\n三、|\n【|$)', major_section, re.DOTALL)
         if goal_match:
-            result['training_goal'] = goal_match.group(1).strip()[:800]
+            result['training_goal'] = goal_match.group(1).strip()
         
-        # 判断教育层次
         if target_code.startswith('7'):
             result['education_level'] = '中等职业教育'
         elif target_code.startswith('5'):
@@ -403,6 +418,110 @@ def parse_md_file(md_path: Path, target_code: str) -> Optional[Dict]:
         print(f"[ERROR] 解析MD文件失败 {md_path}: {e}")
         return None
 
+
+# ==================== 专业-职业对照表查询 ====================
+
+def get_mapping_sheet_name(level: Optional[str] = None) -> str:
+    """
+    根据教育层次获取对照表工作表名称
+    
+    Args:
+        level: 教育层次字符串（可选）
+        
+    Returns:
+        工作表名称
+    """
+    level_lower = (level or '').lower()
+    
+    if '中职' in level_lower or '中等' in level_lower:
+        return '中职专业-职业对照'
+    elif '高职' in level_lower or '专科' in level_lower or '高等' in level_lower:
+        return '高职专科专业-职业对照'
+    elif '本科' in level_lower:
+        return '职业本科专业-职业对照'
+    else:
+        # 默认尝试中职
+        return '中职专业-职业对照'
+
+
+def query_occupation_mapping(
+    major_code: str,
+    level: Optional[str] = None,
+    xlsx_path: str = "assets/专业-职业对照表.xlsx"
+) -> List[Dict]:
+    """
+    从专业-职业对照表查询职业编码
+    
+    Args:
+        major_code: 专业代码（如 740202）
+        level: 教育层次（用于确定工作表）
+        xlsx_path: 对照表文件路径
+        
+    Returns:
+        职业信息列表 [{"code": "4-03-02-03", "name": "西式烹调师"}, ...]
+    """
+    if not HAS_OPENPYXL:
+        print("[WARNING] openpyxl未安装，无法查询对照表")
+        return []
+    
+    results = []
+    
+    try:
+        from pathlib import Path
+        script_dir = Path(__file__).parent
+        project_root = script_dir.parent
+        full_path = project_root / xlsx_path
+        
+        if not full_path.exists():
+            print(f"[WARNING] 对照表文件不存在: {full_path}")
+            return []
+        
+        wb = openpyxl.load_workbook(full_path)
+        
+        # 获取工作表名称
+        sheet_name = get_mapping_sheet_name(level)
+        
+        if sheet_name not in wb.sheetnames:
+            # 尝试其他工作表
+            for name in wb.sheetnames:
+                if '中职' in name or '高职' in name or '本科' in name:
+                    sheet_name = name
+                    break
+        
+        ws = wb[sheet_name]
+        
+        # 专业代码可能在第2列（B列），职业编码在第4列（D列），职业名称在第5列（E列）
+        # 遍历查找
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if len(row) >= 5:
+                row_major_code = row[1]  # 专业代码
+                
+                # 处理专业代码格式（可能是整数或字符串）
+                if isinstance(row_major_code, int):
+                    row_major_code = str(row_major_code)
+                
+                # 匹配专业代码
+                if row_major_code == str(major_code):
+                    occupation_code = row[3]  # 职业编码
+                    occupation_name = row[4]  # 职业名称
+                    
+                    if occupation_code and occupation_name:
+                        results.append({
+                            "code": str(occupation_code) if isinstance(occupation_code, int) else occupation_code,
+                            "name": occupation_name
+                        })
+        
+        if results:
+            print(f"[OK] 从对照表查询到 {len(results)} 个职业")
+        else:
+            print(f"[INFO] 对照表中未找到专业代码 {major_code} 对应的职业")
+            
+    except Exception as e:
+        print(f"[ERROR] 对照表查询失败: {e}")
+    
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description='检索专业教学标准')
     parser.add_argument('--major', '-m', required=True, help='专业名称或代码')
@@ -411,6 +530,8 @@ def main():
     parser.add_argument('--output', '-o', help='输出文件路径')
     parser.add_argument('--no-pdf', action='store_true', help='不解析PDF，仅返回基本信息')
     parser.add_argument('--cache-dir', default='temp/pdf_cache', help='PDF缓存目录')
+    parser.add_argument('--include-occupations', action='store_true', 
+                        help='同时输出专业-职业对照表中的职业编码')
     
     args = parser.parse_args()
     
@@ -422,6 +543,90 @@ def main():
         parse_pdf=not args.no_pdf,
         cache_dir=args.cache_dir
     )
+    
+    # 保存完整raw_text到结果中（确保数据完整性）
+    if result['results']:
+        for item in result['results']:
+            # 从PDF缓存读取完整raw_text
+            if item.get('major_code') and item.get('pdf_parsed'):
+                cache_file = Path(__file__).parent.parent / args.cache_dir / f"{item['major_code']}.json"
+                if args.cache_dir and cache_file.exists():
+                    try:
+                        cache_data = json.loads(cache_file.read_text(encoding='utf-8'))
+                        if cache_data.get('raw_text'):
+                            item['raw_text'] = cache_data['raw_text']
+                    except (json.JSONDecodeError, IOError, OSError):
+                        pass
+    
+    if args.include_occupations and result['results']:
+        for item in result['results']:
+            major_code = item.get('major_code')
+            if major_code:
+                occupations = query_occupation_mapping(major_code, args.level)
+                
+                career_orientation = item.get('career_orientation', '') or item.get('raw_text', '')
+                pdf_occ_codes = []
+                pdf_occ_names = []
+                
+                if career_orientation:
+                    codes = re.findall(r'[（(]([0-9]+-[0-9]+-[0-9]+-[0-9]+)[）)]', career_orientation)
+                    names_match = re.search(r'主要职业类别[（(]代码[）)]\s*(.+?)(?:\n|主要岗位)', career_orientation)
+                    
+                    if codes:
+                        pdf_occ_codes = codes
+                    
+                    if names_match:
+                        names_text = names_match.group(1)
+                        name_pattern = r'([^（(]+)[（(]([0-9]+-[0-9]+-[0-9]+-[0-9]+)[）)]'
+                        pdf_occ_names = [(re.sub(r'^[、，,\s]+', '', m[0]), m[1]) for m in re.findall(name_pattern, names_text)]
+                
+                merged_occupations = []
+                seen_codes = set()
+                
+                for occ in occupations:
+                    occ_code = occ.get('code', '')
+                    occ_name = occ.get('name', '')
+                    if occ_code and occ_code not in seen_codes:
+                        seen_codes.add(occ_code)
+                        merged_occ = {'code': occ_code, 'name': occ_name, 'source': '对照表.xlsx'}
+                        
+                        pdf_codes_prefix = [c for c in pdf_occ_codes if c[:5] == occ_code[:5]]
+                        if pdf_codes_prefix:
+                            merged_occ['validation'] = 'prefix_matched'
+                        else:
+                            merged_occ['validation'] = '对照表仅'
+                        
+                        merged_occupations.append(merged_occ)
+                
+                for name, code in pdf_occ_names:
+                    if code and code not in seen_codes:
+                        seen_codes.add(code)
+                        merged_occ = {'code': code, 'name': name.strip(), 'source': 'PDF解析'}
+                        
+                        mapping_codes = [o.get('code', '') for o in occupations]
+                        if any(mc[:5] == code[:5] for mc in mapping_codes):
+                            merged_occ['validation'] = 'prefix_matched'
+                        else:
+                            merged_occ['validation'] = 'PDF新增'
+                        
+                        merged_occupations.append(merged_occ)
+                
+                item['occupations_from_mapping'] = merged_occupations
+                item['pdf_occupation_codes'] = pdf_occ_codes
+                item['occupation_merge_summary'] = {
+                    'pdf_count': len(pdf_occ_codes),
+                    'mapping_count': len(occupations),
+                    'merged_count': len(merged_occupations)
+                }
+        
+        if args.output:
+            script_dir = Path(__file__).parent
+            project_root = script_dir.parent
+            output_full_path = project_root / args.output
+            output_full_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(output_full_path, 'w', encoding='utf-8') as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+            print(f"[OK] 结果已保存到: {output_full_path}")
     
     print(f"\n检索结果：共找到 {result['total']} 条记录 (数据源: {result['data_source']})")
     for i, item in enumerate(result['results'], 1):
@@ -435,6 +640,12 @@ def main():
                 print(f"    职业面向: {item['career_orientation'][:100]}...")
         elif item.get('pdf_parse_error'):
             print(f"    PDF解析: ❌ {item['pdf_parse_error']}")
+        
+        # 输出职业对照信息
+        if item.get('occupations_from_mapping'):
+            print(f"    职业对照: {len(item['occupations_from_mapping'])} 个职业")
+            for occ in item['occupations_from_mapping']:
+                print(f"      - {occ['name']} ({occ['code']})")
 
 if __name__ == '__main__':
     main()

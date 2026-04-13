@@ -42,28 +42,40 @@ def json_to_md(data: Dict, section_name: str) -> str:
     """
     lines = [f"# {section_name}", ""]
     
-    def format_value(value, indent=0):
+    def format_value(value, indent=0, parent_has_raw=False):
         """递归格式化值为Markdown"""
         nonlocal lines
         prefix = "  " * indent
         
         if isinstance(value, dict):
+            has_raw = 'raw_content' in value and value['raw_content']
             for k, v in value.items():
+                if k == 'raw_content':
+                    if v:
+                        lines.append(f"{prefix}## 原始文档内容")
+                        lines.append("")
+                        for line in v.split('\n'):
+                            lines.append(f"{prefix}{line}")
+                        lines.append("")
+                    continue
                 if isinstance(v, (dict, list)) and v:
                     lines.append(f"{prefix}## {k}")
-                    format_value(v, indent)
+                    format_value(v, indent, has_raw)
                     lines.append("")
                 elif isinstance(v, list) and not v:
-                    lines.append(f"{prefix}- {k}: （空）")
+                    if has_raw:
+                        lines.append(f"{prefix}- {k}: （见上方原始文档内容）")
+                    else:
+                        lines.append(f"{prefix}- {k}: （空）")
                 elif isinstance(v, dict) and not v:
                     lines.append(f"{prefix}- {k}: （空）")
-                else:
-                    format_value(v, indent)
+                elif v is not None and v != '':
+                    lines.append(f"{prefix}- {k}: {v}")
         elif isinstance(value, list):
             for i, item in enumerate(value, 1):
                 if isinstance(item, dict):
                     lines.append(f"{prefix}### 项目 {i}")
-                    format_value(item, indent + 1)
+                    format_value(item, indent + 1, 'raw_content' in item and item.get('raw_content'))
                     lines.append("")
                 else:
                     lines.append(f"{prefix}{i}. {item}")
@@ -101,25 +113,35 @@ def validate_combined_data(md_content: str) -> None:
     print("[OK] 数据完整性验证通过")
 
 
-def load_json(file_path: Path) -> Dict:
+def load_json(file_path: Path, required: bool = False) -> Dict:
     """
     加载JSON文件
     
     Args:
         file_path: JSON文件路径
+        required: 是否为必需文件（缺失时抛出异常）
         
     Returns:
         解析后的字典，失败返回空字典
     """
     if not file_path.exists():
-        print(f"[WARNING] 文件不存在: {file_path}")
+        msg = f"文件不存在: {file_path}"
+        if required:
+            raise FileNotFoundError(msg)
+        print(f"[WARNING] {msg}")
         return {}
     
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
+            if required and not data:
+                raise ValueError(f"文件为空: {file_path}")
+            return data
     except json.JSONDecodeError as e:
-        print(f"[ERROR] JSON解析失败 {file_path}: {e}")
+        msg = f"JSON解析失败 {file_path}: {e}"
+        if required:
+            raise json.JSONDecodeError(msg, e.doc, e.pos)
+        print(f"[ERROR] {msg}")
         return {}
     except IOError as e:
         print(f"[ERROR] 读取文件失败 {file_path}: {e}")
@@ -563,28 +585,21 @@ def main():
         
         if args.major:
             major_path = project_root / args.major if not Path(args.major).is_absolute() else Path(args.major)
-            major_data = load_json(major_path)
+            major_data = load_json(major_path, required=True)
             if major_data:
                 sections.append(json_to_md(major_data, "专业教学标准"))
                 print(f"[OK] 加载专业教学标准: {major_path}")
         
         if args.occupation:
             occ_path = project_root / args.occupation if not Path(args.occupation).is_absolute() else Path(args.occupation)
-            occ_data = load_json(occ_path)
+            occ_data = load_json(occ_path, required=True)
             if occ_data:
                 sections.append(json_to_md(occ_data, "职业信息"))
                 print(f"[OK] 加载职业信息: {occ_path}")
         
-        if args.mapping:
-            map_path = project_root / args.mapping if not Path(args.mapping).is_absolute() else Path(args.mapping)
-            map_data = load_json(map_path)
-            if map_data:
-                sections.append(json_to_md(map_data, "职业映射信息"))
-                print(f"[OK] 加载映射信息: {map_path}")
-        
         if args.international:
             int_path = project_root / args.international if not Path(args.international).is_absolute() else Path(args.international)
-            int_data = load_json(int_path)
+            int_data = load_json(int_path, required=True)
             if int_data:
                 sections.append(json_to_md(int_data, "国际职业数据"))
                 print(f"[OK] 加载国际数据: {int_path}")

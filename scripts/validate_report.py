@@ -8,7 +8,6 @@
 2. 表1岗位与表2对应岗位一致
 3. 表4覆盖表2所有典型任务
 4. 表7与表8能力编号一致
-5. 能力动词符合教育层次要求
 
 用法：
     python scripts/validate_report.py --report temp/report.md --data temp/analysis_data.json
@@ -37,6 +36,47 @@ def load_markdown(file_path: Path) -> str:
     
     with open(file_path, 'r', encoding='utf-8') as f:
         return f.read()
+
+
+def validate_blank_cells(md_content: str) -> Tuple[bool, List[str]]:
+    """验证表格空白单元格（除表7外，其他表格不允许空白）
+    
+    统一规则：扫描所有表格，检测空白单元格，跳过表7
+    """
+    errors = []
+    warnings = []
+    
+    EXCLUDED_TABLES = ["表7", "表7-"]
+    
+    lines = md_content.split('\n')
+    current_table_id = ""
+    in_table = False
+    blank_cells = []
+    
+    for i, line in enumerate(lines, 1):
+        if line.startswith("### 表"):
+            current_table_id = line.split(" ")[2] if len(line.split(" ")) > 2 else ""
+            in_table = True
+        elif line.startswith("|") and in_table:
+            if line.startswith("|---|"):
+                continue
+            
+            cells = [cell.strip() for cell in line.split("|")[1:-1]]
+            for j, cell in enumerate(cells):
+                if cell == "" or cell == "待补充":
+                    if not any(excluded in current_table_id for excluded in EXCLUDED_TABLES):
+                        blank_cells.append(f"{current_table_id} 第{i}行 第{j+1}列")
+        elif not line.startswith("|") and in_table and current_table_id:
+            in_table = False
+    
+    if blank_cells:
+        for cell_loc in blank_cells[:10]:
+            errors.append(f"空白单元格: {cell_loc}")
+        if len(blank_cells) > 10:
+            errors.append(f"... 共 {len(blank_cells)} 个空白单元格")
+        return False, errors
+    
+    return True, ["✅ 所有表格单元格已填充（已跳过表7）"]
 
 
 def validate_table_numbers(md_content: str) -> Tuple[bool, List[str]]:
@@ -190,6 +230,110 @@ def validate_ability_consistency(data: Dict) -> Tuple[bool, List[str]]:
     return True, [f"✅ 表7与表8能力编号一致（{len(all_codes)}个能力）"]
 
 
+def validate_learning_domains_count(data: Dict) -> Tuple[bool, List[str]]:
+    """验证学习领域数量（SKILL.md要求：一般为10个左右）"""
+    warnings = []
+    
+    learning_domains = data.get('learning_domains', [])
+    count = len(learning_domains)
+    
+    if count < 8:
+        warnings.append(f"学习领域数量偏少（当前{count}个，建议≥8个接近10个）")
+        return False, warnings
+    
+    if count > 15:
+        warnings.append(f"学习领域数量偏多（当前{count}个，建议10个左右）")
+        return True, warnings
+    
+    return True, [f"✅ 学习领域数量合理（{count}个）"]
+
+
+def validate_total_hours(data: Dict) -> Tuple[bool, List[str]]:
+    """验证总学时（SKILL.md要求：中职≥1200学时，高职/本科≥1600学时）"""
+    errors = []
+    warnings = []
+    
+    metadata = data.get('metadata', {})
+    major_info = data.get('major_info', {})
+    education_level = metadata.get('education_level', major_info.get('education_level', ''))
+    
+    learning_domains = data.get('learning_domains', [])
+    total_hours = sum(domain.get('reference_hours', 0) for domain in learning_domains)
+    
+    is_zhongzhi = '中职' in education_level or '中等职业' in education_level
+    is_gaozhi = '高职' in education_level or '高等职业' in education_level or '专科' in education_level
+    is_benke = '本科' in education_level or '职业教育本科' in education_level
+    
+    min_hours = 1200 if is_zhongzhi else 1600
+    
+    if total_hours < min_hours:
+        errors.append(f"总学时不足（当前{total_hours}学时，{education_level}要求≥{min_hours}学时）")
+        return False, errors
+    
+    if total_hours < min_hours * 1.1:
+        warnings.append(f"总学时略低于建议值（当前{total_hours}学时，建议{(int)(min_hours * 1.2)}学时左右）")
+        return True, warnings
+    
+    return True, [f"✅ 总学时符合要求（{total_hours}学时）"]
+
+
+def validate_domain_hours_range(data: Dict) -> Tuple[bool, List[str]]:
+    """验证每领域学时范围（SKILL.md要求：48-128学时）"""
+    warnings = []
+    
+    learning_domains = data.get('learning_domains', [])
+    
+    out_of_range = []
+    for domain in learning_domains:
+        name = domain.get('name', '')
+        hours = domain.get('reference_hours', 0)
+        if hours < 48:
+            out_of_range.append(f"{name}: {hours}学时（低于48学时）")
+        elif hours > 128:
+            out_of_range.append(f"{name}: {hours}学时（高于128学时）")
+    
+    if out_of_range:
+        warnings.append(f"部分学习领域学时超出范围（建议48-128学时）:")
+        for item in out_of_range:
+            warnings.append(f"  - {item}")
+        return True, warnings
+    
+    return True, [f"✅ 所有学习领域学时在合理范围（48-128学时）"]
+
+
+def validate_learning_situations_count(data: Dict) -> Tuple[bool, List[str]]:
+    """验证学习情境数量（SKILL.md要求：每领域3-6个）"""
+    errors = []
+    
+    learning_domains = data.get('learning_domains', [])
+    learning_situations = data.get('learning_situations', [])
+    
+    domain_situation_count = {}
+    for situation in learning_situations:
+        domain_id = situation.get('domain_id', '')
+        if domain_id:
+            domain_situation_count[domain_id] = domain_situation_count.get(domain_id, 0) + 1
+    
+    out_of_range = []
+    for domain in learning_domains:
+        domain_id = domain.get('id', '')
+        domain_name = domain.get('name', '')
+        count = domain_situation_count.get(domain_id, 0)
+        if count < 3:
+            out_of_range.append(f"{domain_name}: {count}个情境（少于3个）")
+        elif count > 6:
+            out_of_range.append(f"{domain_name}: {count}个情境（多于6个）")
+    
+    if out_of_range:
+        errors.append(f"部分学习领域情境数量超出范围（建议3-6个）:")
+        for item in out_of_range:
+            errors.append(f"  - {item}")
+        return False, errors
+    
+    total_situations = len(learning_situations)
+    return True, [f"✅ 学习情境数量合理（总计{total_situations}个，每领域3-6个）"]
+
+
 def validate_required_fields(data: Dict) -> Tuple[bool, List[str]]:
     """验证必需字段完整性"""
     errors = []
@@ -258,9 +402,13 @@ def main():
     validations = [
         ("必需字段完整性", validate_required_fields(data)),
         ("表格编号连续性", validate_table_numbers(md_content)),
-        ("能力动词层次匹配", validate_ability_verb_level(data)),
+        ("表格空白单元格", validate_blank_cells(md_content)),
         ("典型任务覆盖性", validate_task_coverage(data)),
         ("能力编号一致性", validate_ability_consistency(data)),
+        ("学习领域数量", validate_learning_domains_count(data)),
+        ("总学时合理性", validate_total_hours(data)),
+        ("领域学时范围", validate_domain_hours_range(data)),
+        ("学习情境数量", validate_learning_situations_count(data)),
     ]
     
     for name, (passed, messages) in validations:

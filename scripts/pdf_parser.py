@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-PDF下载和解析脚本
+PDF Download and Parse Script
 
-功能：
-1. 从URL下载PDF文件
-2. 解析PDF提取文本内容
-3. 将内容转换为结构化数据
+Features:
+1. Download PDF files from URL
+2. Parse PDF to extract text content
+3. Convert content to structured data
 
-依赖：
-- requests: 下载PDF
-- pdfplumber: 解析PDF（推荐，支持表格提取）
-- pypdf: 备选解析库
+Dependencies:
+- requests: Download PDF
+- pdfplumber: Parse PDF (recommended, supports table extraction)
+- pypdf: Alternative parsing library
 
-安装：
+Installation:
 pip install requests pdfplumber pypdf
 """
 
@@ -22,11 +22,11 @@ import re
 import argparse
 import tempfile
 from pathlib import Path
-from typing import Dict, Optional, List
-from dataclasses import dataclass, asdict
+from typing import Dict, Optional, List, Any
+from dataclasses import dataclass, asdict, field
 import os
 
-# 尝试导入PDF解析库
+# Import PDF parsing libraries
 try:
     import pdfplumber
     HAS_PDFPLUMBER = True
@@ -44,38 +44,32 @@ import requests
 
 @dataclass
 class MajorStandard:
-    """专业教学标准数据结构"""
+    """Professional teaching standard data structure"""
     major_code: str = ""
     major_name: str = ""
     education_level: str = ""
     career_orientation: str = ""
     training_goal: str = ""
-    main_courses: List[str] = None
-    graduation_requirements: List[str] = None
+    main_courses: List[str] = field(default_factory=list)
+    graduation_requirements: List[str] = field(default_factory=list)
     source_url: str = ""
     raw_text: str = ""
-    
-    def __post_init__(self):
-        if self.main_courses is None:
-            self.main_courses = []
-        if self.graduation_requirements is None:
-            self.graduation_requirements = []
 
 
 def download_pdf(url: str, output_path: Optional[Path] = None, timeout: int = 30) -> Optional[Path]:
     """
-    从URL下载PDF文件
+    Download PDF file from URL
     
     Args:
-        url: PDF文件URL
-        output_path: 输出路径（可选，默认使用临时文件）
-        timeout: 请求超时时间（秒）
+        url: PDF file URL
+        output_path: Output path (optional, defaults to temp file)
+        timeout: Request timeout (seconds)
     
     Returns:
-        下载的PDF文件路径，失败返回None
+        Downloaded PDF file path, None on failure
     """
     if not url:
-        print("[ERROR] URL为空")
+        print("[ERROR] URL is empty")
         return None
     
     try:
@@ -84,22 +78,15 @@ def download_pdf(url: str, output_path: Optional[Path] = None, timeout: int = 30
         response = requests.get(url, timeout=timeout, stream=True)
         response.raise_for_status()
         
-        # 检查是否为PDF
-        content_type = response.headers.get('Content-Type', '')
-        if 'pdf' not in content_type.lower() and not url.lower().endswith('.pdf'):
-            print(f"[WARNING] 响应可能不是PDF文件: {content_type}")
+        content_type = response.headers.get('content-type', '')
+        if 'pdf' not in content_type.lower():
+            print(f"[WARNING] Response may not be PDF: {content_type}")
         
-        # 确定输出路径
         if output_path is None:
-            # 创建临时文件
-            fd, temp_path = tempfile.mkstemp(suffix='.pdf', prefix='major_standard_')
-            output_path = Path(temp_path)
-            os.close(fd)
-        else:
-            output_path = Path(output_path)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path = Path(tempfile.mktemp(suffix='.pdf'))
         
-        # 下载文件
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
         with open(output_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
@@ -123,16 +110,16 @@ def download_pdf(url: str, output_path: Optional[Path] = None, timeout: int = 30
 
 def extract_text_with_pdfplumber(pdf_path: Path) -> str:
     """
-    使用pdfplumber提取PDF文本
+    Extract PDF text using pdfplumber
     
     Args:
-        pdf_path: PDF文件路径
+        pdf_path: PDF file path
     
     Returns:
-        提取的文本内容
+        Extracted text content
     """
     if not HAS_PDFPLUMBER:
-        raise ImportError("pdfplumber未安装，请运行: pip install pdfplumber")
+        raise ImportError("pdfplumber not installed. Run: pip install pdfplumber")
     
     text_parts = []
     
@@ -140,23 +127,23 @@ def extract_text_with_pdfplumber(pdf_path: Path) -> str:
         for i, page in enumerate(pdf.pages):
             page_text = page.extract_text() or ""
             if page_text.strip():
-                text_parts.append(f"--- 第{i+1}页 ---\n{page_text}")
+                text_parts.append(f"--- Page {i+1} ---\n{page_text}")
     
     return "\n\n".join(text_parts)
 
 
 def extract_text_with_pypdf(pdf_path: Path) -> str:
     """
-    使用pypdf提取PDF文本（备选方案）
+    Extract PDF text using pypdf (alternative)
     
     Args:
-        pdf_path: PDF文件路径
+        pdf_path: PDF file path
     
     Returns:
-        提取的文本内容
+        Extracted text content
     """
     if not HAS_PYPDF:
-        raise ImportError("pypdf未安装，请运行: pip install pypdf")
+        raise ImportError("pypdf not installed. Run: pip install pypdf")
     
     reader = PdfReader(pdf_path)
     text_parts = []
@@ -164,24 +151,24 @@ def extract_text_with_pypdf(pdf_path: Path) -> str:
     for i, page in enumerate(reader.pages):
         page_text = page.extract_text() or ""
         if page_text.strip():
-            text_parts.append(f"--- 第{i+1}页 ---\n{page_text}")
+            text_parts.append(f"--- Page {i+1} ---\n{page_text}")
     
     return "\n\n".join(text_parts)
 
 
 def extract_text(pdf_path: Path, preferred_library: str = "pdfplumber") -> str:
     """
-    从PDF提取文本（自动选择可用库）
+    Extract text from PDF (auto-select available library)
     
     Args:
-        pdf_path: PDF文件路径
-        preferred_library: 首选库 ("pdfplumber" 或 "pypdf")
+        pdf_path: PDF file path
+        preferred_library: Preferred library ("pdfplumber" or "pypdf")
     
     Returns:
-        提取的文本内容
+        Extracted text content
     """
     if not pdf_path.exists():
-        raise FileNotFoundError(f"PDF文件不存在: {pdf_path}")
+        raise FileNotFoundError(f"PDF file not found: {pdf_path}")
     
     errors = []
     
@@ -229,10 +216,21 @@ def parse_major_standard(text: str, major_code: str = "") -> MajorStandard:
     standard.raw_text = text
     standard.major_code = major_code
     
-    # 提取专业名称
-    name_match = re.search(r'专业名称[：:\s]*([^\n]+)', text)
+    # 提取专业名称（PDF格式：标题行"专业名称（专业代码）"，下一行是实际名称）
+    name_match = re.search(r'专业名称.*代码.*\n([^\n]+)', text)
     if name_match:
-        standard.major_name = name_match.group(1).strip()
+        name_raw = name_match.group(1).strip()
+        # 剥离行末的（专业代码）后缀，如"服装设计与工艺（680402）"
+        name_clean = re.sub(r'[（(]\d{6}[）)]$', '', name_raw).strip()
+        standard.major_name = name_clean if name_clean else name_raw
+    else:
+        # 备选匹配：直接匹配"专业名称"后的内容
+        name_match = re.search(r'专业名称[：:\s]*([^\n]+)', text)
+        if name_match:
+            name_raw = name_match.group(1).strip()
+            # 同样剥离代码后缀
+            name_clean = re.sub(r'[（(]\d{6}[）)]$', '', name_raw).strip()
+            standard.major_name = name_clean if name_clean else name_raw
     
     # 提取专业代码（文本中的）
     code_match = re.search(r'专业代码[：:\s]*(\d{6})', text)
@@ -241,11 +239,14 @@ def parse_major_standard(text: str, major_code: str = "") -> MajorStandard:
         if not major_code:
             standard.major_code = text_code
     
-    # 判断教育层次
+    # 判断教育层次（中职专业代码可以是6开头，如68大类）
     if standard.major_code:
-        if standard.major_code.startswith('7'):
+        # 中职：专业大类代码7（电子信息类等）或6开头（轻工纺织等）
+        if standard.major_code.startswith('7') or standard.major_code.startswith('6'):
             standard.education_level = '中等职业教育'
         elif standard.major_code.startswith('5'):
+            standard.education_level = '高等职业教育专科'
+        elif standard.major_code.startswith('4'):
             standard.education_level = '高等职业教育专科'
         elif standard.major_code.startswith('3'):
             standard.education_level = '高等职业教育本科'
@@ -258,7 +259,7 @@ def parse_major_standard(text: str, major_code: str = "") -> MajorStandard:
         text, re.DOTALL
     )
     if orientation_match:
-        standard.career_orientation = orientation_match.group(1).strip()[:1000]
+        standard.career_orientation = orientation_match.group(1).strip()
     
     # 提取培养目标
     goal_match = re.search(
@@ -266,7 +267,7 @@ def parse_major_standard(text: str, major_code: str = "") -> MajorStandard:
         text, re.DOTALL
     )
     if goal_match:
-        standard.training_goal = goal_match.group(1).strip()[:1500]
+        standard.training_goal = goal_match.group(1).strip()
     
     # 提取主要课程
     courses_match = re.search(
@@ -309,7 +310,7 @@ def fetch_and_parse_pdf(
                     cached = json.load(f)
                 print(f"[INFO] 使用缓存: {cache_file}")
                 return MajorStandard(**cached)
-            except:
+            except (json.JSONDecodeError, IOError, OSError):
                 pass
     
     # 下载PDF
@@ -349,7 +350,7 @@ def fetch_and_parse_pdf(
         if pdf_path is None and downloaded_path.exists():
             try:
                 downloaded_path.unlink()
-            except:
+            except (IOError, OSError, PermissionError):
                 pass
 
 

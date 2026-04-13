@@ -60,6 +60,36 @@ python scripts/search_major.py --major "专业名称" --level "教育层次" --n
 
 ## 步骤2：获取职业信息（大模型处理）
 
+### ⚠️ CRITICAL - 必须使用 OccupationDictionaryLoader
+
+> **本步骤必须调用 `OccupationDictionaryLoader` 加载职业大典数据。**
+> 
+> **禁止行为**：直接读取职业信息而不查询职业大典，会导致职业定义缺失。
+>
+> **正确做法**：
+> 1. 根据职业代码首位确定大类文件
+> 2. 使用完整职业代码在文件中检索
+> 3. 提取职业定义和主要工作任务
+
+### OccupationDictionaryLoader 使用方法
+
+```python
+# 在大模型处理步骤中，必须调用 OccupationDictionaryLoader
+from scripts.occupation_dict_loader import OccupationDictionaryLoader
+
+loader = OccupationDictionaryLoader()
+
+# 根据职业代码加载对应大类
+# 例如：职业代码 6-05-01-01 → 加载 class_6_生产制造及有关人员.md
+occupation_data = loader.load_by_occupation_code('6-05-01-01')
+
+# 输出包含：
+# - code: 职业代码
+# - name: 职业名称
+# - definition: 职业定义
+# - main_tasks: 主要工作任务列表
+```
+
 ### 加载职业大典文档
 
 | 职业代码首位 | 大类文件 | 内容示例 |
@@ -69,7 +99,7 @@ python scripts/search_major.py --major "专业名称" --level "教育层次" --n
 | 3 | `class_3_办事人员...md` | 行政办公人员 |
 | 4 | `class_4_社会生产服务...md` | 服务人员 |
 | 5 | `class_5_农林牧渔...md` | 农业生产人员 |
-| 6 | `class_6_生产制造...md` | 制造业人员 |
+| 6 | `class_6_生产制造...md` | 制造业人员（服装制版师、缝纫工等） |
 | 7 | `class_7_2025年新增职业.md` | 新职业 |
 
 ### 输出格式
@@ -262,7 +292,124 @@ python scripts/search_major.py --major "专业名称" --level "教育层次" --n
 
 ---
 
-## 步骤4：ESCO和O*NET映射推断
+## 步骤4：利用大模型世界知识推断ESCO/O*NET映射
+
+### 核心思路
+
+> **本步骤由执行本Skill的Agent利用自身大模型的世界知识完成推断。**
+> 
+> **原理**：
+> - 大模型训练数据包含公开的ESCO（欧盟职业分类）和O*NET（美国职业分类）体系
+> - 无需本地文档依赖，直接利用大模型内置知识推断
+> - 后处理验证编码格式确保输出正确
+> 
+> **优势**：
+> - 无外部依赖（网络、本地文档）
+> - 处理新职业能力强（大模型知识覆盖）
+> - 实现简单（仅需提示词模板）
+
+### 推断流程
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Step 4: 大模型世界知识推断ESCO/O*NET映射                             │
+│                                                                      │
+│  1. 输入：occupation_dict_data.json                                  │
+│     ├─ 职业编码：2-02-38-02                                           │
+│     ├─ 职业名称：物联网工程技术人员                                    │
+│     └─ 职业定义：从事物联网架构、平台、芯片、传感器...                 │
+│                                                                      │
+│  2. Agent构造提示词                                                  │
+│     ├─ 输入：职业名称+编码+定义                                       │
+│     ├─ 提示词模板：职业分类专家角色设定                                │
+│     └─ 要求输出：ESCO编码+名称、O*NET编码+名称                        │
+│                                                                      │
+│  3. 大模型利用世界知识推断                                           │
+│     ├─ 分析职业定义核心能力                                          │
+│     ├─ 匹配ESCO职业（欧盟职业分类体系）                               │
+│     ├─ 匹配O*NET职业（美国职业分类体系）                              │
+│     └─ 输出编码+名称+置信度+推断依据                                  │
+│                                                                      │
+│  4. 后处理验证                                                       │
+│     ├─ ESCO编码格式：4位纯数字                                        │
+│     ├─ O*NET编码格式：XX-XXXX.XX                                     │
+│     └─ 必需字段完整性检查                                            │
+│                                                                      │
+│  5. 输出：occupation_mapping_info.json                               │
+│     ├─ esco_code: 2152                                               │
+│     ├─ esco_name: Electronics engineers                              │
+│     ├─ onet_code: 17-2072.00                                         │
+│     ├─ onet_name: Electronics Engineers, Except Computer             │
+│     ├─ confidence: medium                                            │
+│     └─ mapping_reason: "物联网涉及电子设备、传感器，与电子工程师匹配" │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 提示词模板
+
+```
+你是一个职业分类专家，熟悉ESCO（欧盟职业分类）和O*NET（美国职业分类）体系。
+
+请根据以下中国职业信息，推断对应的国际职业分类编码。
+
+**输入数据**：{occupation_dict_data.json内容}
+
+**任务要求**：
+1. 为每个职业推断ESCO职业（4位数字编码+英文名称）
+2. 为每个职业推断O*NET职业（XX-XXXX.XX编码+英文名称）
+
+**输出格式**：
+{
+  "mappings": [
+    {
+      "china_code": "中国职业编码",
+      "china_name": "中国职业名称",
+      "esco_code": "4位数字",
+      "esco_name": "ESCO职业英文名称",
+      "onet_code": "XX-XXXX.XX",
+      "onet_name": "O*NET职业英文名称",
+      "confidence": "high/medium/low",
+      "mapping_reason": "推断依据（职业核心能力相似性）"
+    }
+  ],
+  "metadata": {
+    "mapping_date": "YYYY-MM-DD",
+    "mapping_method": "大模型世界知识推断",
+    "total_mappings": 数量
+  }
+}
+
+**注意事项**：
+- 若无法精确匹配，输出最接近的职业编码
+- 若置信度低，confidence标记为"low"
+- mapping_reason简要说明匹配依据
+- 不要输出不存在的编码
+```
+
+### ⚠️ CRITICAL - 编码格式强制规范
+
+> **必须严格遵守以下编码格式，格式错误会导致文档查询失败**
+
+| 数据源 | 编码格式 | 示例 | 文件命名规则 |
+|--------|----------|------|--------------|
+| **ESCO** | 4位数字 | `2636`、`7231`、`7541` | `{编码}.1.md`（如 `2636.1.md`） |
+| **O*NET** | XX-XXXX.XX | `27-1022.00`、`49-3023.00` | `{编码}.md`（如 `27-1022.00.md`） |
+
+**常见错误示例**：
+| 错误写法 | 正确写法 | 说明 |
+|----------|----------|------|
+| `ISCO-2636` | `2636` | ESCO不需要ISCO-前缀 |
+| `27-1022` | `27-1022.00` | O*NET必须带.00后缀 |
+| `2636.00` | `2636` | ESCO不需要小数后缀 |
+
+**输出验证**：生成mapping后必须检查：
+```python
+# ESCO编码验证：必须是4位纯数字
+assert len(esco_code) == 4 and esco_code.isdigit()
+
+# O*NET编码验证：格式必须是 XX-XXXX.XX
+assert re.match(r'^\d{2}-\d{4}\.\d{2}$', onet_code)
+```
 
 ### 推断提示词模板
 

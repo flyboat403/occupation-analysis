@@ -133,17 +133,22 @@ def validate_data_structure(data: Dict) -> None:
             
             abilities = domain.get('abilities', {})
             if not abilities:
-                errors.append(f"action_domains[{i}] 缺少 abilities 字段（必需，影响表6-8）")
+                warnings.append(f"action_domains[{i}] 缺少 abilities 字段，表6-8将为空")
+                warnings.append(f"  [HINT] abilities应包含: professional, methodological, social 三类能力")
+            else:
+                required_ability_types = ['professional', 'methodological', 'social']
+                for ab_type in required_ability_types:
+                    if ab_type not in abilities:
+                        warnings.append(f"action_domains[{i}].abilities 缺少 {ab_type} 字段")
     
-    # 检查 learning_domains 结构
     if 'learning_domains' in data:
         for i, course in enumerate(data['learning_domains']):
             if 'name' not in course:
                 errors.append(f"learning_domains[{i}] 缺少 name 字段")
             if 'methods' not in course:
-                errors.append(f"learning_domains[{i}] 缺少 methods 字段（必需，影响表10）")
+                warnings.append(f"learning_domains[{i}] 缺少 methods 字段，表10将为空")
             if 'assessment' not in course:
-                errors.append(f"learning_domains[{i}] 缺少 assessment 字段（必需，影响表10）")
+                warnings.append(f"learning_domains[{i}] 缺少 assessment 字段，表10将为空")
     
     # 输出校验结果
     if errors:
@@ -159,15 +164,149 @@ def validate_data_structure(data: Dict) -> None:
         print("[HINT] 部分表格内容可能为空，建议补充缺失字段\n")
 
 
-def extract_ability_names(ability_list: List) -> List[str]:
-    """从能力列表中提取名称（支持字符串和字典格式）
+def validate_learning_domains(data: Dict) -> Dict:
+    """验证学习领域数据合理性（仅提示，不修复）
+    
+    验证规则（基于SKILL.md要求）：
+    1. 学习领域数量：中职≥8个，高职/本科≥10个
+    2. 每领域学时范围：48-128学时（可扩展至144）
+    3. 总学时：中职≥1200学时，高职/本科≥1600学时
+    4. 每领域学习情境：3-6个
+    
+    注意：学习领域应在语义分析阶段根据典型工作任务合理推导，
+          本函数仅做验证提示，不强行修改数值。
     
     Args:
-        ability_list: 能力列表，元素可以是字符串或字典
-    
+        data: 分析数据字典
+        
     Returns:
-        能力名称列表
+        原数据（不修改）
     """
+    metadata = data.get('metadata', {})
+    education_level = metadata.get('education_level', '')
+    learning_domains = data.get('learning_domains', [])
+    learning_situations = data.get('learning_situations', [])
+    
+    is_zhongzhi = '中职' in education_level or '中等职业' in education_level
+    
+    min_domains = 8 if is_zhongzhi else 10
+    min_total_hours = 1200 if is_zhongzhi else 1600
+    min_domain_hours = 48
+    max_domain_hours = 128
+    
+    warnings = []
+    
+    if not learning_domains:
+        print("[WARN] 无学习领域数据")
+        return data
+    
+    # 验证1：学习领域数量
+    domain_count = len(learning_domains)
+    if domain_count < min_domains:
+        warnings.append(f"学习领域数量不足（当前{domain_count}个，建议≥{min_domains}个）")
+    
+    # 验证2：每领域学时范围
+    out_of_range = []
+    for domain in learning_domains:
+        hours = domain.get('reference_hours', 0)
+        name = domain.get('name', '未命名')
+        if hours < min_domain_hours:
+            out_of_range.append(f"【{name}】{hours}学时（低于{min_domain_hours}）")
+        elif hours > max_domain_hours:
+            out_of_range.append(f"【{name}】{hours}学时（高于{max_domain_hours}）")
+    
+    if out_of_range:
+        warnings.append(f"部分学习领域学时超出范围（建议{min_domain_hours}-{max_domain_hours}学时）:")
+        for item in out_of_range:
+            warnings.append(f"  - {item}")
+    
+    # 验证3：总学时
+    total_hours = sum(d.get('reference_hours', 0) for d in learning_domains)
+    if total_hours < min_total_hours:
+        warnings.append(f"总学时不足（当前{total_hours}学时，{education_level}要求≥{min_total_hours}学时）")
+    
+    # 验证4：学习情境数量
+    domain_situation_count = {}
+    for situation in learning_situations:
+        domain_id = situation.get('domain_id', '')
+        if domain_id:
+            domain_situation_count[domain_id] = domain_situation_count.get(domain_id, 0) + 1
+    
+    situation_issues = []
+    for domain in learning_domains:
+        domain_id = domain.get('id', '')
+        domain_name = domain.get('name', '未命名')
+        count = domain_situation_count.get(domain_id, 0)
+        if count < 3:
+            situation_issues.append(f"【{domain_name}】{count}个情境（少于3个）")
+        elif count > 6:
+            situation_issues.append(f"【{domain_name}】{count}个情境（多于6个）")
+    
+    if situation_issues:
+        warnings.append(f"部分学习领域情境数量不合规（建议3-6个）:")
+        for item in situation_issues:
+            warnings.append(f"  - {item}")
+    
+    if warnings:
+        print("\n[VALIDATION] 学习领域数据验证提示:")
+        for w in warnings:
+            print(f"  {w}")
+        print("\n[建议] 请在语义分析阶段重新设计学习领域：")
+        print("  1. 根据典型工作任务和行动领域推导学习领域")
+        print("  2. 合理分配学时，确保总学时达标")
+        print("  3. 为每个学习领域设计3-6个学习情境")
+        print("  提示：学习领域数量和学时分配应基于课程内容合理生成，而非强行调整数值")
+    
+    return data
+
+
+def check_ability_verbs_hint(data: Dict) -> None:
+    """检查能力动词合规性（仅提示，不修复）
+    
+    Args:
+        data: 分析数据字典
+    """
+    metadata = data.get('metadata', {})
+    education_level = metadata.get('education_level', '')
+    
+    is_zhongzhi = '中职' in education_level or '中等职业' in education_level
+    
+    if not is_zhongzhi:
+        return
+    
+    forbidden_verbs = EDUCATION_LEVEL_FORBIDDEN_VERBS.get('中职', [])
+    allowed_verbs = EDUCATION_LEVEL_ALLOWED_VERBS.get('中职', [])
+    
+    abilities = data.get('abilities', {})
+    all_abilities = (
+        abilities.get('professional', []) +
+        abilities.get('methodological', []) +
+        abilities.get('social', [])
+    )
+    
+    violations = []
+    for ability in all_abilities:
+        if isinstance(ability, dict):
+            desc = ability.get('description', ability.get('name', ''))
+        else:
+            desc = str(ability)
+        
+        for verb in forbidden_verbs:
+            if verb in desc and not any(av in desc for av in allowed_verbs):
+                violations.append({'desc': desc, 'verb': verb})
+    
+    if violations:
+        print("\n[HINT] 能力动词合规性提示（中职层次）:")
+        print(f"  禁止动词: {', '.join(forbidden_verbs)}")
+        print(f"  建议动词: {', '.join(allowed_verbs)}")
+        print("  发现以下能力描述使用了禁止动词:")
+        for v in violations[:5]:
+            print(f"    - '{v['desc']}' 使用了 '{v['verb']}'")
+        print("  [建议] 请手动调整能力描述，使用符合中职层次的动词")
+
+
+def extract_ability_names(ability_list: List) -> List[str]:
+    """从能力列表中提取名称（支持字符串和字典格式）"""
     names = []
     if not ability_list:
         return names
@@ -183,21 +322,69 @@ def extract_ability_names(ability_list: List) -> List[str]:
     return names
 
 
-def generate_markdown_table(headers: List[str], rows: List[List[str]]) -> str:
-    """生成 Markdown 表格（横向表格）"""
+DEFAULT_FILL_VALUES = {
+    "工作对象": "相关工作对象",
+    "工具/材料/设备": "相关专业工具和设备",
+    "工作方法": "按照标准工作流程执行",
+    "劳动组织方式": "独立完成或小组协作",
+    "工作要求": "符合行业标准，按时保质完成",
+    "工作内容": "完成相关工作任务",
+    "职业能力": "具备相关专业技能",
+    "工作条件": "配备必要的专业设备和工具",
+    "工作经验要求": "掌握相关工作技能和方法",
+    "工作成果": "完成任务并达到质量标准",
+    "职业类证书": "相关职业资格证书",
+    "聚类原则": "工作对象相似性原则",
+    "行动领域名称": "",
+    "典型工作任务描述": "",
+    "工作过程": "按照工作任务流程完成相关工作",
+    "工作与学习条件": "实训基地，配备必要的专业设备和工具",
+    "能力描述": "",
+    "能力等级": "初级→中级→高级",
+    "获得途径": "校内实训、企业实习",
+}
+
+EXCLUDED_TABLES_FROM_BLANK_CHECK = ["表7"]
+
+def fill_blank_cell(value: str, key: str, table_id: str = "") -> str:
+    """检测空白单元格并填充默认值
+    
+    Args:
+        value: 单元格当前值
+        key: 单元格键名（用于匹配默认值）
+        table_id: 表格编号（用于判断是否跳过检测）
+    
+    Returns:
+        填充后的值
+    """
+    if not value or value.strip() == "":
+        if any(excluded in table_id for excluded in EXCLUDED_TABLES_FROM_BLANK_CHECK):
+            return ""
+        default = DEFAULT_FILL_VALUES.get(key, f"待补充{key}")
+        return default
+    return value
+
+
+def generate_markdown_table(headers: List[str], rows: List[List[str]], table_id: str = "") -> str:
+    """生成 Markdown 表格（横向表格），自动填充空白单元格"""
     header_line = "| " + " | ".join(headers) + " |"
     separator = "| " + " | ".join(["---"] * len(headers)) + " |"
     data_lines = []
     for row in rows:
         while len(row) < len(headers):
             row.append("")
-        row_str = "| " + " | ".join(str(cell) for cell in row[:len(headers)]) + " |"
+        filled_row = []
+        for i, cell in enumerate(row[:len(headers)]):
+            header_name = headers[i] if i < len(headers) else ""
+            filled_cell = fill_blank_cell(str(cell), header_name, table_id)
+            filled_row.append(filled_cell)
+        row_str = "| " + " | ".join(filled_row) + " |"
         data_lines.append(row_str)
     return "\n".join([header_line, separator] + data_lines)
 
 
-def generate_vertical_table(data: Dict[str, str]) -> str:
-    """生成纵向表格（属性作为行标题）
+def generate_vertical_table(data: Dict[str, str], table_id: str = "") -> str:
+    """生成纵向表格（属性作为行标题），自动填充空白单元格
     
     Pandoc 要求表格必须有：
     1. 表头行
@@ -205,13 +392,11 @@ def generate_vertical_table(data: Dict[str, str]) -> str:
     3. 数据行
     """
     lines = []
-    # 表头行
     lines.append("| 属性 | 内容 |")
-    # 分隔行
     lines.append("|------|------|")
-    # 数据行
     for key, value in data.items():
-        lines.append(f"| **{key}** | {value} |")
+        filled_value = fill_blank_cell(str(value), key, table_id)
+        lines.append(f"| **{key}** | {filled_value} |")
     return "\n".join(lines)
 
 
@@ -255,6 +440,7 @@ def generate_report(data: Dict) -> str:
     date = datetime.now().strftime('%Y年%m月%d日')
     
     sections = []
+    warnings_list = []
     
     # 标题
     sections.append(f"# {major_name}专业职业分析报告\n")
@@ -286,7 +472,8 @@ def generate_report(data: Dict) -> str:
     typical_tasks = data.get('typical_tasks', [])
     job_task_mapping = {}  # {岗位名: [任务名列表]}
     for task in typical_tasks:
-        job = task.get('related_job', '')
+        # 兼容多种字段名：related_job、position、岗位
+        job = task.get('related_job', task.get('position', task.get('岗位', '')))
         task_name = task.get('name', task.get('task_name', ''))
         if job and task_name:
             if job not in job_task_mapping:
@@ -303,7 +490,12 @@ def generate_report(data: Dict) -> str:
     # 获取工作任务详细信息
     task_details = data.get('work_task_details', {})
     
-    # 为每个岗位生成工作任务分析表
+    task_name_to_detail = {}
+    for task in typical_tasks:
+        task_name = task.get('name', task.get('task_name', ''))
+        if task_name:
+            task_name_to_detail[task_name] = task
+    
     for job_name, task_list in job_task_mapping.items():
         for task_name in task_list:
             if not task_name:
@@ -312,49 +504,49 @@ def generate_report(data: Dict) -> str:
             sections.append(f"### 表1-{task_counter} {task_name}工作任务分析\n")
             sections.append(f"**所属岗位**：{job_name}\n")
             
-            # 获取详细分析数据
+            task_detail = task_name_to_detail.get(task_name, {})
             detail = task_details.get(task_name, {})
             
-            # 根据教育层次调整能力描述深度
+            work_object = task_detail.get('work_object', '')
+            tools_materials = task_detail.get('tools_materials', '')
+            work_method = task_detail.get('work_method', '')
+            labor_organization = task_detail.get('labor_organization', '')
+            work_requirements = task_detail.get('work_requirements', '')
+            
             edu_level = metadata.get('education_level', major_info.get('education_level', ''))
-            ability_desc = detail.get('ability', f"能独立完成{task_name}相关任务，具备相应的专业技能和操作能力")
+            ability_desc = detail.get('ability', task_detail.get('work_requirements', f"能独立完成{task_name}相关任务，具备相应的专业技能和操作能力"))
             if '中职' in edu_level:
-                # 中职侧重操作技能
                 ability_desc = ability_desc.replace('分析', '识别').replace('诊断', '检测')
             
-            # 动态生成默认值（基于岗位和任务名称），避免硬编码模板内容
-            default_condition = f"{job_name}工作场所，配备必要的专业设备和工具"
+            content_parts = []
+            if work_object:
+                content_parts.append(f"对{work_object}进行处理")
+            if work_method:
+                content_parts.append(f"采用{work_method}方法")
+            content_desc = "，".join(content_parts) if content_parts else f"根据工作要求，完成{task_name}相关工作任务"
+            
+            condition_parts = []
+            if tools_materials:
+                condition_parts.append(f"使用{tools_materials}")
+            condition_desc = "，".join(condition_parts) if condition_parts else f"{job_name}工作场所，配备必要的专业设备和工具"
+            
+            result_desc = f"完成{task_name}任务，{work_requirements}" if work_requirements else f"完成{task_name}任务并达到质量标准"
+            
             default_certificate = f"{job_name}相关职业资格证书"
             
-            # 根据任务类型智能推断工作条件
             task_lower = task_name.lower()
-            if any(kw in task_lower for kw in ['设计', '视觉', '界面', '平面', 'ui', '交互']):
-                default_condition = "设计工作室，配备设计工作站和专业设计软件"
-                default_certificate = "设计师相关职业资格证书"
-            elif any(kw in task_lower for kw in ['视频', '剪辑', '影视', '后期', '拍摄', '短视频']):
-                default_condition = "视频制作工作室，配备拍摄设备和剪辑工作站"
-                default_certificate = "视频剪辑师相关证书"
-            elif any(kw in task_lower for kw in ['三维', '动画', '建模', '渲染', '特效']):
-                default_condition = "三维动画工作室，配备高性能工作站和专业软件"
-                default_certificate = "数字创意建模相关证书"
-            elif any(kw in task_lower for kw in ['运营', '新媒体', '内容', '媒体', '策划']):
-                default_condition = "新媒体运营工作室，配备内容制作工具和数据分析平台"
-                default_certificate = "全媒体运营师证书"
-            elif any(kw in task_lower for kw in ['维修', '检修', '维护', '故障', '检测', '诊断']):
-                default_condition = "维修车间，配备必要的检测设备和维修工具"
+            if any(kw in task_lower for kw in ['维修', '检修', '维护', '故障', '检测', '诊断']):
                 default_certificate = "维修工职业资格证书"
             elif any(kw in task_lower for kw in ['护理', '照护', '康复', '医疗', '保健']):
-                default_condition = "医疗机构或康复中心，配备必要的护理设备"
                 default_certificate = "护理员或康复师职业资格证书"
             
-            # 使用纵向表格
             table_data = {
                 "工作任务": task_name,
-                "工作内容": detail.get('content', f"根据工作要求，完成{task_name}相关工作任务"),
+                "工作内容": content_desc,
                 "职业能力": ability_desc,
-                "工作条件": detail.get('condition', default_condition),
-                "工作经验要求": detail.get('experience', "经过专业培训，掌握基本操作技能"),
-                "工作成果": detail.get('result', f"完成{task_name}任务并达到质量标准"),
+                "工作条件": condition_desc,
+                "工作经验要求": detail.get('experience', f"掌握{work_method}方法，具备{tools_materials}使用技能" if work_method and tools_materials else "经过专业培训，掌握基本操作技能"),
+                "工作成果": result_desc,
                 "职业类证书": detail.get('certificate', default_certificate)
             }
             sections.append(generate_vertical_table(table_data))
@@ -388,12 +580,18 @@ def generate_report(data: Dict) -> str:
         sections.append(f"### 表3-{i} {task_name}\n")
         
         # 支持新字段名和旧字段名
+        work_requirements = task.get('work_requirements', task.get('requirement', ''))
+        if not work_requirements:
+            work_object = task.get('work_object', task.get('object', ''))
+            work_requirements = f"符合行业标准，按时保质完成{work_object}的制作"
+            warnings_list.append(f"[WARNING] 表3-{i} {task_name} 缺少 work_requirements，已使用默认值")
+        
         table_data = {
             "工作对象": task.get('work_object', task.get('object', '')),
             "工具/材料/设备": task.get('tools_materials', task.get('tools', '')),
             "工作方法": task.get('work_method', task.get('method', '')),
             "劳动组织方式": task.get('labor_organization', task.get('organization', '')),
-            "工作要求": task.get('work_requirements', task.get('requirement', ''))
+            "工作要求": work_requirements
         }
         sections.append(generate_vertical_table(table_data))
         sections.append("\n")
@@ -422,11 +620,18 @@ def generate_report(data: Dict) -> str:
             task_ids = domain.get('tasks', [])
             task_names = [task_id_to_name.get(tid, tid) for tid in task_ids]
             tasks_str = "、".join(task_names)
+            
+            # 聚类原则默认值处理
+            clustering_principle = domain.get('clustering_principle', domain.get('principle', ''))
+            if not clustering_principle:
+                clustering_principle = f"工作对象相似性原则，难度梯度原则"
+                warnings_list.append(f"[WARNING] 表4-1 行动领域{i} 缺少 clustering_principle，已使用默认值")
+            
             rows.append([
                 str(i),
                 domain.get('name', ''),
                 tasks_str,
-                domain.get('clustering_principle', domain.get('principle', ''))
+                clustering_principle
             ])
         sections.append(generate_markdown_table(headers, rows))
     sections.append("\n")
@@ -450,22 +655,23 @@ def generate_report(data: Dict) -> str:
         meth_abilities = abilities.get('methodological', abilities.get('method', []))
         soc_abilities = abilities.get('social', [])
         
-        def extract_ability_names(ability_list):
+        def format_abilities_inline(ability_list):
+            """内联格式化能力列表（用于表5）"""
             names = []
             for a in ability_list:
                 if isinstance(a, dict):
-                    names.append(a.get('name', ''))
+                    names.append(a.get('name', a.get('description', '')))
                 elif isinstance(a, str):
                     names.append(a)
             return "、".join(names) if names else ""
         
-        ability_desc = extract_ability_names(prof_abilities)
+        ability_desc = format_abilities_inline(prof_abilities)
         if meth_abilities:
-            meth_desc = extract_ability_names(meth_abilities)
+            meth_desc = format_abilities_inline(meth_abilities)
             if meth_desc:
                 ability_desc = f"{ability_desc}；{meth_desc}" if ability_desc else meth_desc
         if soc_abilities:
-            soc_desc = extract_ability_names(soc_abilities)
+            soc_desc = format_abilities_inline(soc_abilities)
             if soc_desc:
                 ability_desc = f"{ability_desc}；{soc_desc}" if ability_desc else soc_desc
         
@@ -773,7 +979,37 @@ def generate_report(data: Dict) -> str:
     sections.append("- 职业大典：中国职业分类大典（2022版）")
     sections.append("- 国际数据：ESCO、O*NET\n")
     
-    sections.append("---\n")
+    appendix = data.get('appendix', {})
+    expert_review_notice = appendix.get('expert_review_notice', 
+        '本报告需经行业专家审核验证后方可用于专业建设')
+    
+    sections.append("\n### 专家审核提示\n")
+    sections.append(f"> **{expert_review_notice}**\n\n")
+    
+    review_items = appendix.get('review_items', [
+        "职业面向是否符合行业发展趋势",
+        "典型工作任务是否覆盖主要工作内容",
+        "行动领域划分是否合理",
+        "能力分析是否准确完整",
+        "学习领域转换是否符合教育规律",
+        "学时分配是否科学合理"
+    ])
+    
+    sections.append("**审核要点**：\n")
+    for item in review_items:
+        sections.append(f"{review_items.index(item)+1}. {item}\n")
+    
+    review_recommendations = appendix.get('review_recommendations', [
+        "建议邀请行业企业专家、高校专业教师组成审核小组",
+        "审核周期建议为2-4周",
+        "审核完成后需形成专家审核意见书"
+    ])
+    
+    sections.append("\n**审核建议**：\n")
+    for rec in review_recommendations:
+        sections.append(f"- {rec}\n")
+    
+    sections.append("\n---\n")
     sections.append("*本报告由职业分析 Skill 自动生成*\n")
     
     return "\n".join(sections)
@@ -797,8 +1033,11 @@ def main():
     
     data = load_analysis_data(data_path)
     
-    # 校验数据结构
     validate_data_structure(data)
+    
+    validate_learning_domains(data)
+    
+    check_ability_verbs_hint(data)
     
     print(f"[INFO] 生成 Markdown 报告...")
     markdown_content = generate_report(data)

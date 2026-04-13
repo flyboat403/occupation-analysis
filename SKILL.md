@@ -1,7 +1,7 @@
 ---
 name: occupation-analysis
 version: 1.0.0
-description: 职业教育专业建设辅助工具，按工作过程系统化方法生成七部分结构的职业分析报告，支持中职、高职、职教本科三个层次；当用户需要职业分析、工作任务分析、典型工作任务提取、行动领域划分、学习领域转换或课程开发时使用
+description: 职业教育专业建设辅助工具，生成职业分析报告（工作过程系统化方法，七部分结构）。支持教育层次：中职、高职、职教本科。**MUST USE场景**：(1) 用户提供专业名称/代码，要求生成职业分析报告；(2) 用户明确要求"职业分析"、"工作任务分析"、"典型工作任务提取"；(3) 用户要求"行动领域划分"、"学习领域转换"、"学习情境设计"。**触发关键词**：职业分析、专业建设、典型工作任务、行动领域、学习领域、职业面向、教育层次、专业代码、课程开发、西餐烹饪、汽车维修。**输出物**：Markdown报告 + Word文档
 dependency:
   python:
     - requests==2.31.0
@@ -16,7 +16,7 @@ dependency:
 
 ## 概述
 
-本skill用于职业教育专业建设中的职业分析环节，按照工作过程系统化课程开发方法，自动生成规范的职业分析文档。
+本skill用于职业教育专业建设中的职业分析环节，按照工作过程系统化课程开发方法(工作任务分析-典型工作任务分析-行动领域划分-职业能力归纳-学习领域转换-学习情境设计)，自动生成规范的职业分析文档。
 
 **适用范围**：
 - 中等职业教育（中职）
@@ -40,55 +40,57 @@ dependency:
 | 职教本科 | 管理/技术岗 | 技术创新与管理 | 综合应用、系统优化 |
 
 **判断方法**：查看专业教学标准中的"培养目标"关键词：
-- "熟练操作"、"掌握...技能" → 中职深度
-- "技术应用"、"故障诊断" → 高职深度
-- "系统设计"、"项目管理" → 职教本科深度
+- "技能人才" → 中职深度
+- "高素质技术技能人才" → 高职深度
+- "高层次技术技能人才" → 职教本科深度
 
 ### 2. 数据源选择决策树
 
 ```
-需要职业数据？
-├─ 职业定义和主要任务 → 必须用中国职业大典（本地文件）
-├─ 技能和能力补充 → 推荐 ESCO/O*NET（本地文档）
-└─ 工具和工作环境 → 可选 O*NET Tools & Technology
+需要职业数据（本地文档）？
+├─ 职业教育专业和职业岗位信息 → 专业-职业对照表.xlsx
+├─ 职业定义和主要任务 → 必须用中国职业大典
+├─ 技能和能力补充、工具和工作环境、职业素养 → 推荐 ESCO/O*NET（本地文档）和 O*NET Tools & Technology
+
 ```
 
 **数据源必要性判断**：
 
 | 场景 | 中国职业大典 | ESCO | O*NET |
 |------|-------------|------|-------|
+| 专业与职业岗位对照 | 必须 | 补充 | 补充 |
 | 职业定义提取 | 必须 | 补充 | 补充 |
 | 工作任务分析 | 必须 | 补充 | 补充 |
 | 技能要求分析 | 参考 | 推荐 | 推荐 |
-| 工作情境分析 | 参考 | 参考 | 推荐 |
-| 工具技术分析 | 不需要 | 不需要 | 推荐 |
+| 工作情境分析 | 参考 | 推荐 | 推荐 |
+| 工具技术分析 | 不需要 | 推荐 | 推荐 |
 
-### 3. Token 优化策略
-
-**核心问题**：如何在不超出上下文限制的情况下完成任务？
+### 3. 职业大典分段加载策略
 
 ```
-完整职业大典 = ~136K tokens（超出大多数模型限制）
 
-分块策略：
+**分块策略**：
 ├─ 按职业代码第一位选择大类文件
-├─ 第6大类最大（~62K tokens）- 生产制造类职业
-├─ 第2大类次之（~36K tokens）- 专业技术人员
-└─ 其他大类均 <30K tokens
-```
+├─ 第5大类- 农林牧渔业生产及辅助人员
+├─ 第6大类- 生产制造类及有关人员
+├─ 第2大类- 专业技术人员
+├─ 第4大类- 社会生产服务和生活服务人员
+└─ 其他大类
 
 **关键判断**：
 - 如果目标职业代码以 `6-` 开头 → 加载第6大类
 - 如果需要多个职业 → 检查是否属于同一大类，合并加载
 
+```
 ### 4. 课程转换逻辑
 
 **行动领域 → 学习领域 的转换依据**：
 
-1. **工作对象相似性**：处理相同或相关对象的任务归为一类
+1. **工作对象相似性**：处理相同或相关对象的任务归为一类，适配职业岗位工作内容范畴
 2. **任务难度梯度**：从简单到复杂，符合学习认知规律
 3. **工作逻辑顺序**：按实际工作流程排列
-4. **学时合理性**：每个学习领域参考学时 48-96 学时为宜
+4. **学时合理性**：每个学习领域参考学时 48-144 学时为宜,累计学时：中职一般不少于1200学时，高职专科和本科一般不少于1600学时
+5. **学习领域数量**: 一般为10个左右
 
 ---
 
@@ -96,9 +98,6 @@ dependency:
 
 ### Token 和性能
 
-- **NEVER** 一次性加载完整职业大典文件（`职业大典2022.md`，~136K tokens）
-  - 原因：会耗尽上下文窗口，导致后续步骤失败
-  - 正确做法：使用 `OccupationDictionaryLoader` 按需加载对应大类
 
 - **NEVER** 在同一会话中重复加载同一大类文件
   - 原因：浪费 tokens，`OccupationDictionaryLoader` 已实现缓存
@@ -106,12 +105,12 @@ dependency:
 
 ### 数据处理
 
-- **NEVER** 使用简单字符串匹配来对应中国职业代码与国际标准
+- **NEVER** 使用简单字符串匹配来对应中国职业代码与ESCO、ISCO和O*NET代码
   - 原因：不同分类体系命名差异大（如"汽车维修工" vs "Motor Vehicle Mechanic"）
-  - 正确做法：由大模型进行语义理解和推断
+  - 正确做法：进行语义理解和推断
 
 - **NEVER** 忽略教育层次差异，为所有层次生成相同深度的内容
-  - 原因：中职侧重操作，本科侧重管理，内容深度必须匹配
+  - 原因：中职侧重操作和陈述性知识，本科侧重创新、组织管理和策略性知识，工作任务分析和学习领域描述等内容深度必须匹配
   - 正确做法：参考"层次适配原则"调整能力描述深度
 
 - **NEVER** 在用户确认职业信息前就开始数据检索
@@ -178,28 +177,33 @@ dependency:
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ 阶段一：数据获取（Python脚本 + 大模型）                                            │
 ├──────────────────────────────────────────────────────────────────────────────────┤
-│  步骤1: 检索专业教学标准    → search_major.py      → major_info.json             │
+│  步骤1: 检索专业教学标准及职业编码对照（Python脚本）                              │
+│         - search_major.py 检索专业教学标准                                        │
+│         - 查询专业-职业对照表.xlsx，获取职业编码和名称                              │
+│         → major_info.json（含职业编码列表）                                        │
 │                                                                                  │
-│  步骤2: 获取职业信息（大模型处理）                                                 │
-│         - 加载职业大典文档（class_*.md）                                          │
-│         - 语义解析职业面向字段                                                     │
-│         - 输出：职业代码、名称、定义、任务                                         │
+│  步骤2: 获取职业详细信息（大模型处理）                                            │
+│         ⚠️ MANDATORY: 必须使用 OccupationDictionaryLoader 加载职业大典              │
+│         - 根据职业代码首位加载对应的职业大典文档（class_*.md）                         │
+│         - 使用完整职业代码在文件中检索职业定义和主要工作任务                           │
+│         - 语义解析职业面向字段补充岗位信息                                             │
 │         → occupation_info.json                                                   │
 │                                                                                  │
-│  步骤3: 【新增】用户确认环节（⚠️ 强制性暂停点）                                    │
+│  步骤3: 用户确认环节（⚠️ 强制性暂停点）                                    │
 │         - 展示提取的职业信息（批量展示）                                           │
 │         - 使用 question 工具展示确认选项                                          │
 │         - ⚠️ 必须等待用户回复（确认/修改/删除）                                     │
 │         - 若用户提出新职业不在职业大典 → 要求重新提出                              │
 │         → 确认后的occupation_info.json                                            │
 │                                                                                  │
-│  步骤4: 【新增】Agent/大模型推断ESCO和O*NET映射                                   │
-│         - 对每个职业单独进行映射推断                                              │
-│         - 根据职业定义和任务推断英文名称和代码                                     │
-│         - 输出：ESCO名称+代码、O*NET名称+代码                                     │
+│  步骤4: 利用大模型世界知识推断ESCO/O*NET映射                               │
+│         - 输入：occupation_dict_data.json                                    │
+│         - Agent构造提示词，调用自身大模型的世界知识推断                │
+│         - 输出ESCO编码（4位数字）+名称、O*NET编码（XX-XXXX.XX）+名称     │
+│         - 后处理验证编码格式                                                  │
 │         → occupation_mapping_info.json                                           │
 │                                                                                  │
-│  步骤5: 【修改】从本地文档获取详细内容                                             │
+│  步骤5: 从本地文档获取详细内容                                             │
 │         - 查询 assets/esco_detail_md/（ESCO文档）                                │
 │         - 查询 assets/onet_details_md/（O*NET文档）                              │
 │         - 若文档缺失 → 警告并等待用户确认后继续                                   │
@@ -210,40 +214,40 @@ dependency:
                                        │
                                        ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ 阶段二：语义分析与生成（大模型自身）                                                │
+│ 阶段二：语义分析与生成（大模型）                                                │
 ├──────────────────────────────────────────────────────────────────────────────────┤
 │  步骤7: 职业面向语义解析                                                          │
-│         - 从职业面向字段提取职业名称和岗位名称                                     │
-│         - 生成分岗位的工作任务列表                                                 │
-│                                                                                  │
+│         - 从职业面向、职业岗位、职业工种等内容提取职业名称、岗位名称、工作任务    │
+│         - 生成分岗位的工作任务列表                                                │
+│                                                                                   │
 │  步骤8: 工作任务分析                                                              │
-│         - 为每个工作任务生成：工作对象、工具/材料、工作方法、劳动组织              │
-│         - 根据教育层次适配能力描述深度                                             │
-│                                                                                  │
+│         - 为每个工作任务生成：工作对象、工具/材料、工作方法、劳动组织、工作成果等 │
+│         - 根据教育层次适配能力描述深度                                            │
+│                                                                                   │
 │  步骤9: 典型工作任务确定                                                          │
 │         - 归类相似工作任务                                                        │
 │         - 确定任务难度等级                                                        │
 │         - 生成典型工作任务汇总表                                                  │
-│                                                                                  │
+│                                                                                   │
 │  步骤10: 行动领域划分                                                             │
-│         - 按工作对象相似性、任务难度梯度、工作逻辑顺序聚类                         │
+│         - 按工作对象相似性、任务难度梯度、工作逻辑顺序等原则聚类                  │
 │         - 生成行动领域表和聚类原则                                                │
 │         - 设定能力等级递进（初级→中级→高级）                                      │
-│                                                                                  │
+│                                                                                   │
 │  步骤11: 职业能力分析                                                             │
 │         - 推导专业能力、方法能力、社会能力                                        │
-│         - 生成表6（汇总表）、表7（一览表）、表8（解构表）                          │
+│         - 生成表6（汇总表）、表7（一览表）、表8（解构表）                         │
 │         - 确保表7与表8能力编号和名称一致                                          │
-│                                                                                  │
+│                                                                                   │
 │  步骤12: 学习领域转换                                                             │
-│         - 行动领域转换为学习领域                                                 │
-│         - 设定参考学时（每领域48-96学时为宜）                                    │
-│         - 生成学习目标和学习内容                                                 │
-│                                                                                  │
+│         - 行动领域转换为学习领域                                                  │
+│         - 设定参考学时                                                            │
+│         - 生成学习目标和学习内容                                                  │
+│                                                                                   │
 │  步骤13: 学习情境设计                                                             │
-│         - 为每个学习领域设计3-6个学习情境                                        │
-│         - 生成学时、教学方式、评价方式                                           │
-│                                                                                  │
+│         - 为每个学习领域设计3-6个学习情境                                         │
+│         - 生成学时、教学方式、评价方式                                            │
+│                                                                                   │
 │  步骤14: 输出结构化分析数据 → analysis_data.json                                  │
 └──────────────────────────────────────────────────────────────────────────────────┘
                                        │
@@ -263,9 +267,10 @@ dependency:
 │  步骤16: 质量校验                                                                │
 │          - 验证表1岗位与表2对应岗位一致                                           │
 │          - 验证表4覆盖表2所有典型任务                                             │
-│          - 验证能力动词符合教育层次要求                                           │
 │          - 验证表格编号连续（表1→表11）                                           │
 │          - 验证表7与表8能力编号一致                                               │
+│          - 验证总学时符合教育层次要求                                             │
+│          - 验证学习情境数量合理（每领域3-6个）                                     │
 │                                                                                  │
 │  步骤17: 问题修复（如有）                                                         │
 │          - 修复发现的问题                                                         │
@@ -278,7 +283,7 @@ dependency:
 
 | 步骤 | 执行者 | 任务类型 | 输出 |
 |------|--------|----------|------|
-| 1 | Python脚本 | 数据获取 | major_info.json |
+| 1 | Python脚本 | 数据获取+精确匹配 | major_info.json（含职业编码） |
 | **2** | **大模型** | 文档解析、职业信息提取 | occupation_info.json |
 | **3** | **大模型+用户** | 用户确认 | 确认后的occupation_info.json |
 | **4** | **大模型** | ESCO/O*NET映射推断 | occupation_mapping_info.json |
@@ -310,133 +315,96 @@ python -c "from pathlib import Path; files=['assets/moe_pdfs_final.json', 'asset
 
 **核心检查项**：Python 3.8+、依赖安装、数据文件（职业大典、ESCO、O*NET本地文档）。
 
-## 数据源配置
+## 数据源配置（摘要）
+
+> **详细数据源说明**：[`references/workflow_details.md`](references/workflow_details.md)
 
 ### 本地数据文件
-
-所有数据文件位于 `assets/` 目录下：
 
 | 文件 | 路径 | 说明 |
 |------|------|------|
 | 专业教学标准 | `assets/moe_pdfs_final.json` | 教育部发布的专业教学标准索引 |
-| 专业简介 | `assets/moe_pdfs_new.json` | 备选数据源 |
+| 专业-职业对照表 | `assets/专业-职业对照表.xlsx` | 专业对应职业和岗位的对照表 |
 | 职业大典 | `assets/occupation_dictionary_split/` | 中国职业分类大典（2022版，按大类拆分） |
 | ESCO文档 | `assets/esco_detail_md/` | ESCO职业详细文档（约3000+个MD文件） |
 | O*NET文档 | `assets/onet_details_md/` | O*NET职业详细文档（894个MD文件） |
 
+### 职业大典分段加载
 
+> **关键判断**：根据职业代码首位数字加载对应大类文件
 
-### 职业大典
+| 代码首位 | 大类 |
+|---------|------|
+| 6 | 第6大类-生产制造类及有关人员 |
+| 5 | 第5大类-农林牧渔业生产及辅助人员 |
+| 4 | 第4大类-社会生产服务和生活服务人员 |
+| 2 | 第2大类-专业技术人员 |
 
-**方案**：将完整职业大典（~136K tokens）按6个大类拆分为小文件，按需加载
+**使用方法**：`OccupationDictionaryLoader.load_by_occupation_code('6-22-02')`
 
-| 大类 | 文件名 | Token数 |
-|------|--------|---------|
-| 第1大类 | `class_1_党的机关...负责人.md` | ~5K |
-| 第2大类 | `class_2_专业技术人员.md` | ~36K |
-| 第3大类 | `class_3_办事人员...md` | ~3K |
-| 第4大类 | `class_4_社会生产服务...md` | ~27K |
-| 第5大类 | `class_5_农林牧渔...md` | ~5K |
-| 第6大类 | `class_6_生产制造...md` | ~62K |
-| 第7大类 | `class_7_2025年新增职业.md` | ~62K |
+### ESCO/O*NET查询
 
-**使用方法**：
-```python
-from scripts.occupation_dict_loader import OccupationDictionaryLoader
+- ESCO文件命名：`{ISCO代码}.{序号}.md`（如 `7231.1.md`）
+- O*NET文件命名：`{O*NET代码}.md`（如 `49-3023.00.md`）
 
-loader = OccupationDictionaryLoader()
-# 根据职业代码自动加载对应大类
-content = loader.load_by_occupation_code('6-22-02')  # 只加载第6大类
-```
+## 实施步骤概览
 
-### ESCO本地文档
-
-**位置**：`assets/esco_details_md/`
-
-**文件命名**：`{ISCO代码}.{序号}.md`（如 `7231.1.md`、`7231.2.md`）
-
-**特点**：
-- 一个ISCO代码可能对应多个文件（不同的具体职业）
-- 例如 ISCO代码 `7231`（Motor vehicle mechanics and repairers）对应多个文件：
-  - `7231.1.md` - automotive brake technician
-  - `7231.2.md` - motorcycle technician
-  - 等等...
-
-**内容结构**：
-```markdown
-# automotive brake technician
-
-## Basic Information
-| Field | Value |
-|-------|-------|
-| **Title** | automotive brake technician |
-| **ISCO Code** | 7231.1 |
-
-## Description
-Automotive brake technicians inspect, maintain, diagnose...
-
-## Essential Skills
-### Skills
-- wear appropriate protective gear
-- troubleshoot
-...
-
-## Essential Knowledge
-- automotive diagnostic equipment
-- mechanics of motor vehicles
-...
-```
-
-**查询方式**：
-1. 根据大模型推断的ISCO代码（如 `7231`）查找所有匹配文件
-2. 合并所有匹配文件的内容进行分析
-
-### O*NET本地文档
-
-**位置**：`assets/onet_details_md/`
-
-**文件命名**：O*NET代码.md（如 `49-3023.00.md`）
-
-**内容结构**：
-```markdown
-# 49-3023.00 - Automotive Service Technicians and Mechanics
-
-## Summary
-Diagnose, adjust, repair, or overhaul automotive vehicles.
-
-## Tasks
-| Importance | Category | Task |
-|------------|----------|------|
-| 91 | Core | Inspect vehicles for damage... |
-
-## Worker Requirements
-### Skills
-### Knowledge
-### Abilities
-```
-
-**查询方式**：
-1. 根据大模型推断的O*NET代码查找文件
-2. 精确匹配代码（如 `49-3023.00`）
-
-## 实施步骤
+> **详细执行命令和输出格式**：各步骤的详细内容详见 [`references/workflow_details.md`](references/workflow_details.md)
 
 ---
 
-## 阶段一：数据获取（Python脚本执行）
+## 阶段一：数据获取
 
-> 本阶段所有步骤由Python脚本完成，Agent只需调用脚本并读取输出。
+### 步骤1：检索专业教学标准（Python脚本）
 
-### 步骤1：检索专业教学标准
+> **MANDATORY - READ**: [`references/workflow_details.md`](references/workflow_details.md) 步骤1
 
-> **详细执行命令和脚本逻辑详见**：[references/workflow_details.md](references/workflow_details.md) 步骤1
+**执行命令**：`python scripts/search_major.py --major "专业名称" --level "教育层次" --output temp/major_info.json`
 
-**任务**：从专业教学标准数据源检索专业信息。
+**输出**：`major_info.json`
 
-**执行命令**：
-```bash
-python scripts/search_major.py --major "专业名称" --level "教育层次" --output temp/major_info.json
-```
+### 步骤2：获取职业信息（大模型处理）
+
+> **MANDATORY - READ**: [`references/workflow_details.md`](references/workflow_details.md) 步骤2
+>
+> ⚠️ **CRITICAL - 必须使用 OccupationDictionaryLoader**
+>
+> 本步骤必须调用 `scripts/occupation_dict_loader.py` 加载职业大典数据。
+> 禁止直接读取职业信息而不查询职业大典，会导致职业定义缺失。
+
+**核心任务**：检索专业-职业对照表、加载职业大典、提取职业详细信息
+
+**输出**：`occupation_info.json`
+
+### 步骤3：用户确认环节（⚠️ 强制性暂停点）
+
+> **MANDATORY - READ**: [`references/workflow_details.md`](references/workflow_details.md) 步骤3
+> 
+> ⚠️ **必须等待用户回复**：展示职业信息 → question工具确认 → 等待回复 → 继续步骤4
+
+**重要约束**：用户新增职业必须在职业大典中存在。
+
+### 步骤4：ESCO/O*NET映射推断（大模型世界知识）
+
+> **MANDATORY - READ**: [`references/workflow_details.md`](references/workflow_details.md) 步骤4
+
+**核心任务**：利用大模型世界知识推断ESCO和O*NET职业编码
+
+**输出**：`occupation_mapping_info.json`
+
+### 步骤5：本地文档查询（Python脚本）
+
+> **MANDATORY - READ**: [`references/workflow_details.md`](references/workflow_details.md) 步骤5
+
+**执行命令**：`python scripts/fetch_local.py --mapping temp/occupation_mapping_info.json --output temp/international_data.json`
+
+**输出**：`international_data.json`
+
+### 步骤6：整合基础数据（Python脚本）
+
+**执行命令**：`python scripts/integrate_data.py ... --output temp/combined_data.md`
+
+**输出**：`combined_data.md`
 
 **输出**：`major_info.json`，包含专业代码、名称、职业面向、培养目标等字段。
 
@@ -447,11 +415,19 @@ python scripts/search_major.py --major "专业名称" --level "教育层次" --o
 > **详细流程和输出格式详见**：[references/workflow_details.md](references/workflow_details.md) 步骤2
 
 **任务**：
-1. 加载对应的职业大典大类文件（根据职业代码首位）
-2. 从职业面向字段提取职业名称，在职业大典中查找匹配条目
-3. 提取职业代码、定义、任务
+1. **检索专业-职业对照表**：读取 `assets/专业-职业对照表.xlsx`，根据专业代码查找对应的职业编码和名称
+2. **加载职业大典文档**：根据职业编码首位数字，加载对应的职业大典大类文件（class_*.md）
+3. **提取职业详细信息**：在职业大典中匹配职业条目，提取职业定义、主要工作任务等
+4. **语义解析补充**：从专业教学标准的职业面向字段，补充提取岗位名称和工作任务
 
 **输出**：`occupation_info.json`，包含 `occupations` 和 `jobs` 数组。
+
+**对照表结构示例**：
+```
+专业代码: 740202 | 专业名称: 西餐烹饪
+职业编码: 4-03-02-03 | 职业名称: 西式烹调师
+职业编码: 4-03-02-04 | 职业名称: 西式面点师
+```
 
 ### 步骤3：用户确认环节
 
@@ -494,21 +470,65 @@ python scripts/search_major.py --major "专业名称" --level "教育层次" --o
 
 **输出**：确认后的 `occupation_info.json`。
 
-### 步骤4：Agent/大模型推断ESCO和O*NET映射
+### 步骤4：利用大模型世界知识推断ESCO/O*NET映射
 
 > **本步骤由执行本Skill的Agent（大模型）完成**
 > 
-> **推断提示词模板和输出格式详见**：[references/workflow_details.md](references/workflow_details.md) 步骤4
+> Agent利用自身大模型的**世界知识**推断ESCO和O*NET职业编码。
+> 
+> **核心思路**：
+> - 大模型训练数据包含公开的ESCO（欧盟职业分类）和O*NET（美国职业分类）体系
+> - 无需本地文档依赖，直接利用大模型知识推断
+> - 后处理验证编码格式确保输出正确
 
-**任务**：
-1. 分析职业定义和工作任务
-2. 语义匹配ESCO职业（英文名称+4位ISCO代码）
-3. 语义匹配O*NET职业（英文名称+O*NET代码）
-4. 评估映射置信度
+**输入文件**：`temp/occupation_dict_data.json`
 
-**输出格式规范**：[references/occupation_mapping_template.json](references/occupation_mapping_template.json)
+**提示词模板**：
+```
+你是一个职业分类专家，熟悉ESCO（欧盟职业分类）和O*NET（美国职业分类）体系。
 
-**输出**：`occupation_mapping_info.json`，包含 `mapping_results` 数组。
+请根据以下中国职业信息，推断对应的国际职业分类编码。
+
+**输入数据**：{occupation_dict_data.json内容}
+
+**任务要求**：
+1. 为每个职业推断ESCO职业（4位数字编码+英文名称）
+2. 为每个职业推断O*NET职业（XX-XXXX.XX编码+英文名称）
+
+**输出格式**：
+{
+  "mappings": [
+    {
+      "china_code": "中国职业编码",
+      "china_name": "中国职业名称",
+      "esco_code": "4位数字",
+      "esco_name": "ESCO职业英文名称",
+      "onet_code": "XX-XXXX.XX",
+      "onet_name": "O*NET职业英文名称",
+      "confidence": "high/medium/low",
+      "mapping_reason": "推断依据（职业核心能力相似性）"
+    }
+  ],
+  "metadata": {
+    "mapping_date": "YYYY-MM-DD",
+    "mapping_method": "大模型世界知识推断",
+    "total_mappings": 数量
+  }
+}
+
+**注意事项**：
+- 若无法精确匹配，输出最接近的职业编码
+- 若置信度低，confidence标记为"low"
+- mapping_reason简要说明匹配依据
+- 不要输出不存在的编码
+```
+
+**后处理验证**：
+- ESCO编码格式：4位纯数字（如2529）
+- O*NET编码格式：XX-XXXX.XX（如15-1132.00）
+- 必需字段完整性检查
+
+**输出**：`occupation_mapping_info.json`
 
 ### 步骤5：从本地文档获取详细内容
 
@@ -560,161 +580,72 @@ python scripts/integrate_data.py \
 - 职业代码：4-03-02-03
 ...
 
-# 国际职业数据
+# 欧盟职业数据
 ## ESCO数据
 ...
 ```
 
 ---
 
-## 阶段二：语义分析与生成（大模型自身执行）
+## 阶段二：语义分析与生成
 
 > Agent/大模型基于阶段一获取的数据，进行语义理解、分析推理、创造性生成。
+> 
+> **核心参考资料**：[`references/work_process_method.md`](references/work_process_method.md)
 
-**输入文件**：`temp/combined_data.md`（包含专业教学标准、职业信息、国际职业数据）
+**输入文件**：`temp/combined_data.md`
 
 ### 步骤7：职业面向语义解析
 
-**输入**：`career_orientation` 字段（如"面向数字媒体艺术专业人员等职业，摄影摄像、数字影音剪辑、界面设计等岗位。"）
-
-**任务**：
-1. 提取职业名称列表
-2. 提取岗位名称列表
-3. 语义匹配职业大典中的职业代码
-4. 生成分岗位的工作任务列表
-
-**输出示例**：
-```json
-{
-  "occupations": [
-    {"name": "数字媒体艺术专业人员", "code": "2-09-06-07"}
-  ],
-  "jobs": [
-    {"name": "摄影摄像", "related_occupation": "2-09-06-07"},
-    {"name": "数字影音剪辑", "related_occupation": "2-09-06-07"},
-    {"name": "界面设计", "related_occupation": "2-09-06-07"}
-  ]
-}
-```
+**任务**：从职业面向字段提取职业名称、岗位名称、工作任务列表
 
 ### 步骤8：工作任务分析
 
-**教育层次适配原则**：
-
-| 层次 | 能力动词 | 不建议使用的动词 |
+**教育层次适配**：
+| 层次 | 能力动词 | 禁止动词 |
 |------|----------|----------|
-| 中职 | 操作、执行、完成、使用、识别、检测 | 设计、优化、创新、管理、分析、诊断 |
-| 高职 | 检测、诊断、分析、维护、维修、优化、改进 | 研发、创新、管理 |
+| 中职 | 操作、执行、完成、使用、识别、检测 | 设计、优化、创新、管理、分析 |
+| 高职 | 检测、诊断、分析、维护、维修、优化 | 研发、创新、管理 |
 | 职教本科 | 设计、优化、管理、创新 | - |
-
-**任务**：
-为每个岗位的工作任务生成完整分析，字段包括：工作任务、工作内容、工作对象、工具/材料、工作方法、劳动组织、工作要求、职业能力、工作条件、职业类证书。
 
 ### 步骤9：典型工作任务确定
 
-**任务**：
-1. 归类相似工作任务
-2. 确定任务难度等级（简单/中等/复杂）
-3. 生成典型工作任务汇总表
-
-**输出**：`typical_tasks` 数组，包含 `name`、`related_job`、`difficulty`、`description` 字段。
+**任务**：归类相似任务、确定难度等级（简单/中等/复杂）、生成汇总表
 
 ### 步骤10：行动领域划分
 
-> **MANDATORY - READ REFERENCE FILE**: 开始前必须阅读
-> [`references/work_process_method.md`](references/work_process_method.md) 
-> 的**2.1 行动领域描述通用模板**章节。
+> **MANDATORY - READ**: [`references/work_process_method.md`](references/work_process_method.md) 第3.3节（行动领域）+ 第2.1节（模板）+ 第四节步骤3（一致性检查）
 
-**Do NOT load**: `troubleshooting.md`、`precheck_guide.md`（此步骤不需要）
-
-**聚类原则**：
-1. **工作对象相似性**：处理相同或相关对象的任务归为一类
-2. **任务难度梯度**：从简单到复杂，符合学习认知规律
-3. **工作逻辑顺序**：按实际工作流程排列
-
-**任务**：
-1. 将典型任务聚类为4-8个行动领域
-2. 为每个领域设定能力等级（初级→中级→高级）
-3. 使用模板格式描述每个行动领域
+**聚类原则**：工作对象相似性、任务难度梯度、工作逻辑顺序
 
 ### 步骤11：职业能力分析
 
-**能力分类与编号规则**：
-- **Z. 专业能力** (ZhuanYe)：专业知识和技能，编号格式 Z001, Z002...
-- **F. 方法能力** (FangFa)：工作方法和学习能力，编号格式 F001, F002...
-- **S. 社会能力** (SheHui)：沟通协作和职业道德，编号格式 S001, S002...
+**能力编号规则**：Z=专业能力、F=方法能力、S=社会能力
 
-**任务**：
-1. 为每个行动领域推导专业能力、方法能力、社会能力
-2. 生成表6（汇总表）、表7（一览表）、表8（解构表）
-3. **确保表7与表8能力编号和名称完全一致**
-
-**关键约束**：
-- 表7列标题必须使用 "Z 专业能力 | F 方法能力 | S 社会能力"
-- 表7每个能力单元格必须包含编号（如 "Z001 能力名称"）
-- 表8能力编号必须与表7一一对应
-- 编号前缀：Z=专业能力，F=方法能力，S=社会能力
+**关键约束**：表7与表8能力编号必须一一对应
 
 ### 步骤12：学习领域转换
 
-> **MANDATORY - READ REFERENCE FILE**: 开始前必须阅读
-> [`references/work_process_method.md`](references/work_process_method.md) 
-> 的**2.2 学习领域描述通用模板**章节。
-
-**Do NOT load**: `troubleshooting.md`、`precheck_guide.md`（此步骤不需要）
+> **MANDATORY - READ**: [`references/work_process_method.md`](references/work_process_method.md) **第五节**（推导算法：数量计算、命名规则、拆分判断、学时估算）+ 第2.2节（模板）
 
 **转换原则**：
-1. 每个行动领域对应1-2个学习领域
-2. 参考学时：每领域48-128学时
-3. 课程深度匹配教育层次
-
-**任务**：
-1. 行动领域转换为学习领域
-2. 设定参考学时
-3. 使用模板格式生成学习目标和学习内容
+- 每个行动领域对应1-2个学习领域
+- 参考学时：每领域48-144学时
+- 总学时：中职≥1200，高职≥1600
 
 ### 步骤13：学习情境设计
 
-> **MANDATORY - READ REFERENCE FILE**: 开始前必须阅读
-> [`references/work_process_method.md`](references/work_process_method.md) 
-> 的**2.3 学习情境描述通用模板**章节。
+> **MANDATORY - READ**: [`references/work_process_method.md`](references/work_process_method.md) **第六节**（情境设计：数量计算、命名规则、学时分配）+ 第2.3节（模板）
 
-**Do NOT load**: `troubleshooting.md`、`precheck_guide.md`（此步骤不需要）
+**任务**：为每个学习领域设计3-8个情境，分配学时（16-32学时/情境）
 
-**任务**：
-为每个学习领域设计3-6个学习情境，包含：情境名称、参考学时、学习目标、学习内容、教学方式、评价方式。
+### 步骤14：输出结构化数据
 
-### 步骤14：输出结构化分析数据
+> **MANDATORY - READ**: [`references/analysis_data_template.json`](references/analysis_data_template.json) 完整格式规范
 
-将步骤7-13的分析结果整合为完整的 `analysis_data.json`。
+**必需字段**：major_info、occupations、jobs、typical_tasks、action_domains、abilities、learning_domains、learning_situations、metadata
 
-> **MANDATORY - READ REFERENCE FILE**: 完整格式规范详见
-> [references/analysis_data_template.json](references/analysis_data_template.json)
-
-**必需字段**：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `major_info` | Object | 专业基本信息 |
-| `occupations` | Array | 职业列表 |
-| `jobs` | Array | 岗位列表 |
-| `typical_tasks` | Array | 典型工作任务列表 |
-| `action_domains` | Array | 行动领域列表（含能力分析） |
-| `abilities` | Object | 三类能力汇总（professional/methodological/social） |
-| `learning_domains` | Array | 学习领域列表 |
-| `learning_situations` | Array | 学习情境列表 |
-| `metadata` | Object | 元数据（教育层次、日期等） |
-
-**⚠️ 子字段约束（必须包含，否则报告生成失败）**：
-
-| 父字段 | 必需子字段 | 影响 |
-|--------|-----------|------|
-| `action_domains[i]` | `tasks` | 表4典型任务覆盖验证失败 |
-| `action_domains[i]` | `abilities` | 表6-8能力分析表格为空 |
-| `learning_domains[i]` | `methods` | 表10教学方法为空 |
-| `learning_domains[i]` | `assessment` | 表10评价方式为空 |
-
-> **验证机制**：`generate_report.py` 会在数据结构不完整时抛出错误并终止，要求修复 `analysis_data.json`
+**子字段约束**：action_domains[i]必须包含tasks和abilities；learning_domains[i]必须包含methods和assessment
 
 ---
 
