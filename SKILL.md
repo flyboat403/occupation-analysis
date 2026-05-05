@@ -204,10 +204,10 @@ dependency:
 │         → occupation_mapping_info.json                                           │
 │                                                                                  │
 │  步骤5: 从本地文档获取详细内容                                             │
-│         - 查询 assets/esco_detail_md/（ESCO文档）                                │
-│         - 查询 assets/onet_details_md/（O*NET文档）                              │
-│         - 若文档缺失 → 警告并等待用户确认后继续                                   │
-│         → international_data.json                                                │
+ │         - 查询 assets/esco_detail_md/（ESCO文档）                                │
+ │         - 查询 assets/onet_details_md/（O*NET文档）                              │
+ │         - 若文档缺失 → 警告并等待用户确认后继续                                   │
+ │         → international_data.md（Markdown格式）                                 │
 │                                                                                  │
 │  步骤6: 整合基础数据        → integrate_data.py      → combined_data.md            │
 └──────────────────────────────────────────────────────────────────────────────────┘
@@ -289,7 +289,7 @@ dependency:
 | **2** | **大模型** | 文档解析、职业信息提取 | occupation_info.json |
 | **3** | **大模型+用户** | 用户确认 | 确认后的occupation_info.json |
 | **4** | **大模型** | ESCO/O*NET映射推断 | occupation_mapping_info.json |
-| 5 | Python脚本 | 本地文档查询 | international_data.json |
+| 5 | Python脚本 | 本地文档查询 | international_data.md（Markdown格式） |
 | 6 | Python脚本 | 数据合并 | combined_data.md |
 | 7-14 | **大模型自身** | 语义分析与生成 | analysis_data.json |
 | 15 | Python脚本 | 格式化输出 | report.md |
@@ -398,9 +398,9 @@ python -c "from pathlib import Path; files=['assets/moe_pdfs_final.json', 'asset
 
 > **MANDATORY - READ**: [`references/workflow_details.md`](references/workflow_details.md) 步骤5
 
-**执行命令**：`python scripts/fetch_local.py --mapping temp/occupation_mapping_info.json --output temp/international_data.json`
+**执行命令**：`python scripts/fetch_local.py --mapping temp/occupation_mapping_info.json --output temp/international_data.md`
 
-**输出**：`international_data.json`
+**输出**：`international_data.md`（Markdown格式）
 
 ### 步骤6：整合基础数据（Python脚本）
 
@@ -542,26 +542,26 @@ python -c "from pathlib import Path; files=['assets/moe_pdfs_final.json', 'asset
 ```bash
 python scripts/fetch_local.py \
   --mapping temp/occupation_mapping_info.json \
-  --output temp/international_data.json
+  --output temp/international_data.md
 ```
 
 **脚本行为**：
-- 根据ESCO代码查询 `assets/esco_details_md/` 目录
-- 根据O*NET代码查询 `assets/onet_details_md/` 目录
+- 根据ESCO代码查询 `assets/esco_details_md/` 目录，直接读取原始MD内容
+- 根据O*NET代码查询 `assets/onet_details_md/` 目录，直接读取原始MD内容
 - 若文档缺失则展示警告，等待用户确认后继续
 
-**输出**：`international_data.json`，包含ESCO和O*NET职业详细信息。
+**输出**：`international_data.md`（Markdown格式），包含ESCO和O*NET职业详细信息。
 
 ### 步骤6：整合基础数据
 
-将以上JSON文件合并为 `combined_data.md`（Markdown格式），供大模型分析使用。
+将以上JSON文件和MD文件合并为 `combined_data.md`（Markdown格式），供大模型分析使用。
 
 ```bash
 python scripts/integrate_data.py \
   --major temp/major_info.json \
   --occupation temp/occupation_info.json \
   --mapping temp/occupation_mapping_info.json \
-  --international temp/international_data.json \
+  --international temp/international_data.md \
   --output temp/combined_data.md
 ```
 
@@ -735,8 +735,8 @@ Agent执行本Skill时，按以下清单逐项确认：
 - [ ] 步骤2（大模型）：已加载职业大典文档，输出职业信息
 - [ ] 步骤3（大模型+用户）：已展示确认面板，**用户已回复确认**，`occupation_info.json` 已更新
 - [ ] 步骤4（大模型）：ESCO/O*NET映射已完成
-- [ ] 步骤5（Python脚本）：`international_data.json` 已生成（如有缺失已警告）
-- [ ] 步骤6：基础数据已整合
+- [ ] 步骤5（Python脚本）：`international_data.md` 已生成（Markdown格式，如有缺失已警告）
+- [ ] 步骤6：基础数据已整合（combined_data.md，Markdown格式）
 
 ### 阶段二检查（大模型自身）
 - [ ] 步骤7：职业面向已解析

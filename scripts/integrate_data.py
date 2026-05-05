@@ -406,237 +406,7 @@ def extract_abilities(source_data: Dict) -> List[Dict]:
     
     return [{"ability_name": a.get('name', a) if isinstance(a, dict) else a} for a in raw_abilities[:10]]
 
-def generate_job_tasks(
-    china_data: Dict,
-    esco_data: Dict,
-    onet_data: Dict
-) -> List[Dict]:
-    """
-    生成job_tasks数据（表1：工作任务分析表数据源）
-    
-    从occupations的tasks展开生成每个职业的工作任务分析，
-    包含五个维度：工作对象、工具/材料、工作方法、劳动组织、工作成果
-    """
-    job_tasks = []
-    task_counter = 1
-    
-    occupations = china_data.get('occupations', [])
-    if not occupations:
-        if china_data.get('name'):
-            occupations = [{
-                'code': china_data.get('code', ''),
-                'name': china_data.get('name', ''),
-                'tasks': china_data.get('tasks', [])
-            }]
-    
-    for occ in occupations:
-        occ_code = occ.get('code', '')
-        occ_name = occ.get('name', '')
-        tasks = occ.get('tasks', []) or occ.get('main_tasks', [])
-        
-        esco_info = _infer_from_esco(esco_data, tasks)
-        onet_info = _infer_from_onet(onet_data, tasks)
-        
-        for idx, task in enumerate(tasks):
-            task_str = task.strip() if isinstance(task, str) else task.get('text', task.get('task', str(task)))
-            if not task_str:
-                continue
-            
-            task_id = f"T{task_counter:03d}"
-            task_counter += 1
-            
-            work_object = _infer_work_object(task_str, esco_info, onet_info)
-            tools_materials = _infer_tools_materials(task_str, esco_info, onet_info)
-            work_method = _infer_work_method(task_str, esco_info, onet_info)
-            labor_organization = "独立完成或小组协作"
-            work_result = f"完成{task_str}任务"
-            difficulty_level = _infer_difficulty(task_str)
-            
-            job_tasks.append({
-                "id": task_id,
-                "occupation_code": occ_code,
-                "occupation_name": occ_name,
-                "task_name": task_str,
-                "work_object": work_object,
-                "tools_materials": tools_materials,
-                "work_method": work_method,
-                "labor_organization": labor_organization,
-                "work_result": work_result,
-                "difficulty_level": difficulty_level
-            })
-    
-    return job_tasks
 
-
-def _infer_from_esco(esco_data: Dict, tasks: List) -> Dict:
-    """从ESCO数据提取推断信息"""
-    if not esco_data:
-        return {}
-    
-    info = {}
-    sources = esco_data.get('sources', {})
-    esco_source = sources.get('ESCO-API') or sources.get('IMA-ESCO') or {}
-    
-    skills = esco_source.get('skills', [])
-    info['skills'] = [s.get('name', s) if isinstance(s, dict) else s for s in skills]
-    
-    knowledge = esco_source.get('knowledge', [])
-    info['knowledge'] = [k.get('name', k) if isinstance(k, dict) else k for k in knowledge]
-    
-    return info
-
-
-def _infer_from_onet(onet_data: Dict, tasks: List) -> Dict:
-    """从O*NET数据提取推断信息"""
-    if not onet_data:
-        return {}
-    
-    info = {}
-    sources = onet_data.get('sources', {})
-    onet_source = sources.get('ONET-API') or sources.get('IMA-ONET') or {}
-    
-    summary = onet_source.get('summary', {}) if isinstance(onet_source.get('summary'), dict) else {}
-    
-    tools = summary.get('tools', onet_source.get('tools', []))
-    info['tools'] = [t.get('name', t) if isinstance(t, dict) else t for t in tools[:10]]
-    
-    skills = summary.get('skills', onet_source.get('skills', []))
-    info['skills'] = [s.get('name', s) if isinstance(s, dict) else s for s in skills[:10]]
-    
-    knowledge = summary.get('knowledge', onet_source.get('knowledge', []))
-    info['knowledge'] = [k.get('name', k) if isinstance(k, dict) else k for k in knowledge[:10]]
-    
-    work_activities = summary.get('work_activities', onet_source.get('work_activities', []))
-    info['work_activities'] = [a.get('name', a) if isinstance(a, dict) else a for a in work_activities[:10]]
-    
-    return info
-
-
-def _infer_work_object(task_str: str, esco_info: Dict, onet_info: Dict) -> str:
-    """推断工作对象"""
-    knowledge = esco_info.get('knowledge', []) + onet_info.get('knowledge', [])
-    
-    if knowledge:
-        return "、".join(knowledge[:4])
-    
-    mapping = {
-        '网络': '网络系统及应用环境',
-        '设备': '设备及相关运行环境',
-        '系统': '系统及相关模块',
-        '产品': '产品及相关生产环境',
-        '数据': '数据源及处理环境',
-        '客户': '客户需求及应用场景',
-        '设计': '设计对象及应用场景',
-        '测试': '测试对象及测试环境',
-        '维护': '设备及相关运行环境',
-    }
-    for keyword, obj in mapping.items():
-        if keyword in task_str:
-            return obj
-    return '相关工作对象及环境'
-
-
-def _infer_tools_materials(task_str: str, esco_info: Dict, onet_info: Dict) -> str:
-    """推断工具/材料"""
-    tools = onet_info.get('tools', [])
-    skills = esco_info.get('skills', []) + onet_info.get('skills', [])
-    
-    if tools:
-        return "、".join(tools[:5])
-    
-    if skills:
-        return "、".join([s + "相关工具" for s in skills[:3]])
-    
-    mapping = {
-        '分析': '分析工具、数据处理软件',
-        '设计': '设计软件、绘图工具',
-        '测试': '测试仪器、调试工具',
-        '维护': '维护工具、检测仪器',
-        '配置': '配置工具、管理软件',
-        '开发': '开发环境、编程工具、版本控制软件',
-        '管理': '管理系统、办公软件',
-        '服务': '服务工具、通讯设备',
-    }
-    for keyword, tool in mapping.items():
-        if keyword in task_str:
-            return tool
-    return '相关工作工具和材料'
-
-
-def _infer_work_method(task_str: str, esco_info: Dict, onet_info: Dict) -> str:
-    """推断工作方法"""
-    activities = onet_info.get('work_activities', [])
-    
-    if activities:
-        return "→".join(activities[:4])
-    
-    mapping = {
-        '分析': '需求收集→数据分析→报告编写→方案评审',
-        '设计': '需求分析→方案设计→原型制作→评审优化',
-        '测试': '制定测试计划→执行测试→记录结果→输出报告',
-        '维护': '故障排查→原因分析→修复实施→验证确认',
-        '配置': '环境准备→参数设置→功能验证→文档记录',
-        '开发': '需求分析→设计开发→测试验证→部署上线',
-        '管理': '计划制定→组织实施→过程监控→总结评估',
-        '服务': '需求确认→服务提供→效果评估→持续改进',
-        '维修': '故障诊断→方案制定→维修实施→质量检验',
-        '诊断': '现象观察→原因分析→方案制定→实施验证',
-    }
-    for keyword, method in mapping.items():
-        if keyword in task_str:
-            return method
-    return '调研分析→方案制定→实施执行→效果评估'
-
-
-def _infer_difficulty(task_str: str) -> str:
-    """推断难度等级"""
-    hard_keywords = ['设计', '优化', '管理', '研发', '创新', '规划', '架构', '诊断', '分析']
-    medium_keywords = ['配置', '测试', '维护', '维修', '调试', '实施', '编制', '评估', '改进']
-    
-    for kw in hard_keywords:
-        if kw in task_str:
-            return '较难'
-    for kw in medium_keywords:
-        if kw in task_str:
-            return '中等'
-    return '简单'
-
-
-def analyze_typical_tasks(tasks: List[Dict]) -> List[Dict]:
-    """
-    分析并提炼典型工作任务
-    
-    基于工作任务列表，分析归类形成典型工作任务
-    """
-    if not tasks:
-        return []
-    
-    typical_tasks = []
-    task_groups = {}
-    
-    for task in tasks:
-        # 防御性编程：确保task字典有'task'键
-        task_text = task.get('task', '')
-        if not task_text:
-            continue
-        
-        # 简单的关键词匹配分组
-        keywords = ['维护', '维修', '诊断', '检测', '销售', '服务', '管理']
-        for keyword in keywords:
-            if keyword in task_text:
-                if keyword not in task_groups:
-                    task_groups[keyword] = []
-                task_groups[keyword].append(task)
-                break
-    
-    for keyword, group_tasks in task_groups.items():
-        typical_tasks.append({
-            "name": f"{keyword}相关工作",
-            "count": len(group_tasks),
-            "tasks": group_tasks[:5]  # 只保留前5个示例
-        })
-    
-    return typical_tasks
 
 def integrate_data(
     china_path: Optional[str],
@@ -681,7 +451,7 @@ def integrate_data(
         onet_full_path = project_root / onet_path
         onet_data = load_json(onet_full_path)
     
-    # 整合数据
+    # 整合数据（仅合并，不做语义推断）
     integrated = {
         "china_data": china_data,
         "international_data": {
@@ -696,15 +466,10 @@ def integrate_data(
         }
     }
     
-    job_tasks = generate_job_tasks(china_data, esco_data, onet_data)
-    
-    integrated["analysis"] = {
-        "typical_tasks": analyze_typical_tasks(integrated["merged"]["tasks"]),
-        "job_tasks": job_tasks
-    }
+    # Python脚本只做数据搬运，语义推断由大模型完成（步骤7-14）
     
     integrated["hours_summary"] = {
-        "job_tasks_count": len(job_tasks)
+        "data_sources": ["china", "esco", "onet"]
     }
     
     # 保存国际数据到独立临时文件，供后续分析任务使用
@@ -801,10 +566,16 @@ def main():
         
         if args.international:
             int_path = project_root / args.international if not Path(args.international).is_absolute() else Path(args.international)
-            int_data = load_json(int_path, required=True)
-            if int_data:
-                sections.append(json_to_md(int_data, "国际职业数据"))
-                print(f"[OK] 加载国际数据: {int_path}")
+            if int_path.suffix == '.md':
+                with open(int_path, 'r', encoding='utf-8') as f:
+                    int_content = f.read()
+                sections.append(int_content)
+                print(f"[OK] 加载国际数据（MD格式）: {int_path}")
+            else:
+                int_data = load_json(int_path, required=True)
+                if int_data:
+                    sections.append(json_to_md(int_data, "国际职业数据"))
+                    print(f"[OK] 加载国际数据（JSON格式）: {int_path}")
         
         # 添加元数据
         metadata = f"""---
@@ -844,8 +615,8 @@ def main():
     
     print(f"\n数据整合完成")
     print(f"- 工作任务: {len(result['merged']['tasks'])} 条")
-    print(f"- 工作任务分析(job_tasks): {len(result['analysis']['job_tasks'])} 条")
-    print(f"- 典型工作任务: {len(result['analysis']['typical_tasks'])} 个")
+    print(f"- 技能: {len(result['merged']['skills'])} 条")
+    print(f"- 知识: {len(result['merged']['knowledge'])} 条")
     if result.get('international_details'):
         print(f"- 国际数据文件: 已保存")
 
