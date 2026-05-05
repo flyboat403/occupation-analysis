@@ -129,7 +129,7 @@ dependency:
 
 - **NEVER** 跳过用户确认环节
   - 原因：职业信息可能有误或不完整，用户可能需要修改、删除或新增职业
-  - 正确做法：步骤3必须使用 `question` 工具展示确认面板，**等待用户回复**后才能继续步骤4
+  - 正确做法：步骤4必须使用 `question` 工具展示确认面板，**等待用户回复**后才能继续步骤5
   - ⚠️ 即使执行"全流程测试"也必须等待用户确认
 
 - **NEVER** 忽略本地文档缺失警告
@@ -164,10 +164,10 @@ dependency:
                                       │
                                       ▼ JSON数据
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                        大模型处理层（语义分析与生成）                              │
+│                        agent大模型处理层（语义分析与生成）                              │
 │                                                                                 │
-│  职责：语义理解、创造性生成、质量校验                                             │
-│  特点：由执行本Skill的Agent（当前大模型）完成，不单独调用API                       │
+│  职责：文本检索、语义理解、创造性生成、质量校验                                             │
+│  特点：由执行本Skill的Agent（当前大模型）完成                       │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -189,75 +189,74 @@ dependency:
 │         - 语义解析职业面向字段补充岗位信息                                             │
 │         → occupation_info.json                                                   │
 │                                                                                  │
-│  步骤3: 用户确认环节（⚠️ 强制性暂停点）                                    │
+│  步骤3: ESCO/O*NET映射推断（大模型世界知识）                                   │
+│         - 输入：occupation_dict_data.json                                           │
+│         - Agent构造提示词，调用自身大模型的世界知识推断                              │
+│         - 输出ESCO编码（4位数字）+名称、O*NET编码（XX-XXXX.XX）+名称               │
+│         - 后处理验证编码格式                                                      │
+│         → occupation_mapping_info.json                                            │
+│                                                                                  │
+│  步骤4: 用户确认环节（⚠️ 强制性暂停点）                                    │
 │         - 展示提取的职业信息（批量展示）                                           │
+│         - 确认面板同时展示中国职业信息和国际映射结果                                 │
 │         - 使用 question 工具展示确认选项                                          │
 │         - ⚠️ 必须等待用户回复（确认/修改/删除）                                     │
 │         - 若用户提出新职业不在职业大典 → 要求重新提出                              │
 │         → 确认后的occupation_info.json                                            │
 │                                                                                  │
-│  步骤4: 利用大模型世界知识推断ESCO/O*NET映射                               │
-│         - 输入：occupation_dict_data.json                                    │
-│         - Agent构造提示词，调用自身大模型的世界知识推断                │
-│         - 输出ESCO编码（4位数字）+名称、O*NET编码（XX-XXXX.XX）+名称     │
-│         - 后处理验证编码格式                                                  │
-│         → occupation_mapping_info.json                                           │
-│                                                                                  │
-│  步骤5: 从本地文档获取详细内容                                             │
- │         - 查询 assets/esco_detail_md/（ESCO文档）                                │
- │         - 查询 assets/onet_details_md/（O*NET文档）                              │
- │         - 若文档缺失 → 警告并等待用户确认后继续                                   │
- │         → international_data.md（Markdown格式）                                 │
-│                                                                                  │
-│  步骤6: 整合基础数据        → integrate_data.py      → combined_data.md            │
+│  步骤5: 整合全部数据（Python脚本）                                               │
+ │         - 读取 major_info.json、occupation_dict_data.json、mapping_info.json       │
+ │         - 按映射代码读取 assets/esco_details_md/ 和 onet_details_md/ 原始文档      │
+ │         - 零提取、零转换，合并输出 Markdown                                         │
+ │         → combined_data.md（4个数据源）                                            │
 └──────────────────────────────────────────────────────────────────────────────────┘
                                        │
                                        ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ 阶段二：语义分析与生成（大模型）                                                │
 ├──────────────────────────────────────────────────────────────────────────────────┤
-│  步骤7: 职业面向语义解析                                                          │
+│  步骤6: 职业面向语义解析                                                          │
 │         - 从职业面向、职业岗位、职业工种等内容提取职业名称、岗位名称、工作任务    │
 │         - 生成分岗位的工作任务列表                                                │
 │                                                                                   │
-│  步骤8: 工作任务分析                                                              │
+│  步骤7: 工作任务分析                                                              │
 │         - 参考：report_template.md 表1字段定义                                    │
 │         - 为每个职业的每个工作任务生成完整分析                                    │
 │         - 输出：job_tasks[]（表1数据源）                                          │
 │                                                                                   │
-│  步骤9: 典型工作任务确定                                                          │
+│  步骤8: 典型工作任务确定                                                          │
 │         - 参考：report_template.md 表2+表3字段定义                                │
 │         - 参考：work_process_method.md 典型工作任务特征                           │
 │         - 从job_tasks中筛选提炼典型工作任务                                       │
 │         - 输出：typical_tasks[]（表2+表3数据源）                                  │
 │                                                                                   │
-│  步骤10: 行动领域划分                                                             │
+│  步骤9: 行动领域划分                                                             │
 │         - 按工作对象相似性、任务难度梯度、工作逻辑顺序等原则聚类                  │
 │         - 生成行动领域表和聚类原则                                                │
 │         - 设定能力等级递进（初级→中级→高级）                                      │
 │                                                                                   │
-│  步骤11: 职业能力分析                                                             │
+│  步骤10: 职业能力分析                                                             │
 │         - 推导专业能力、方法能力、社会能力                                        │
 │         - 生成表6（汇总表）、表7（一览表）、表8（解构表）                         │
 │         - 确保表7与表8能力编号和名称一致                                          │
 │                                                                                   │
-│  步骤12: 学习领域转换                                                             │
+│  步骤11: 学习领域转换                                                             │
 │         - 行动领域转换为学习领域                                                  │
 │         - 设定参考学时                                                            │
 │         - 生成学习目标和学习内容                                                  │
 │                                                                                   │
-│  步骤13: 学习情境设计                                                             │
+│  步骤12: 学习情境设计                                                             │
 │         - 为每个学习领域设计3-6个学习情境                                         │
 │         - 生成学时、教学方式、评价方式                                            │
 │                                                                                   │
-│  步骤14: 输出结构化分析数据 → analysis_data.json                                  │
+│  步骤13: 输出结构化分析数据 → analysis_data.json                                  │
 └──────────────────────────────────────────────────────────────────────────────────┘
                                        │
                                        ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ 阶段三：格式化输出（Python脚本）                                                   │
 ├──────────────────────────────────────────────────────────────────────────────────┤
-│  步骤15: 生成Markdown报告   → generate_report.py    → report.md                  │
+│  步骤14: 生成Markdown报告   → generate_report.py    → report.md                  │
 │           - 将analysis_data.json转换为Markdown格式                                │
 │           - 按七部分结构组织表格                                                   │
 └──────────────────────────────────────────────────────────────────────────────────┘
@@ -266,7 +265,7 @@ dependency:
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ 阶段四：自我校正（大模型自身）                                                      │
 ├──────────────────────────────────────────────────────────────────────────────────┤
-│  步骤16: 质量校验                                                                │
+│  步骤15: 质量校验                                                                │
 │          - 验证表1岗位与表2对应岗位一致                                           │
 │          - 验证表4覆盖表2所有典型任务                                             │
 │          - 验证表格编号连续（表1→表11）                                           │
@@ -274,7 +273,7 @@ dependency:
 │          - 验证总学时符合教育层次要求                                             │
 │          - 验证学习情境数量合理（每领域3-6个）                                     │
 │                                                                                  │
-│  步骤17: 问题修复（如有）                                                         │
+│  步骤16: 问题修复（如有）                                                         │
 │          - 修复发现的问题                                                         │
 │          - 重新生成analysis_data.json                                            │
 │          - 最多3次修复循环                                                        │
@@ -287,13 +286,12 @@ dependency:
 |------|--------|----------|------|
 | 1 | Python脚本 | 数据获取+精确匹配 | major_info.json（含职业编码） |
 | **2** | **大模型** | 文档解析、职业信息提取 | occupation_info.json |
-| **3** | **大模型+用户** | 用户确认 | 确认后的occupation_info.json |
-| **4** | **大模型** | ESCO/O*NET映射推断 | occupation_mapping_info.json |
-| 5 | Python脚本 | 本地文档查询 | international_data.md（Markdown格式） |
-| 6 | Python脚本 | 数据合并 | combined_data.md |
-| 7-14 | **大模型自身** | 语义分析与生成 | analysis_data.json |
-| 15 | Python脚本 | 格式化输出 | report.md |
-| 16-17 | **大模型自身** | 质量校验与修复 | 最终报告 |
+| **3** | **大模型** | ESCO/O*NET映射推断 | occupation_mapping_info.json |
+| **4** | **大模型+用户** | 用户确认 | 确认后的occupation_info.json |
+| 5 | Python脚本 | 整合全部数据（读取4个数据源+本地原始MD） | combined_data.md |
+| 6-13 | **大模型自身** | 语义分析与生成 | analysis_data.json |
+| 14 | Python脚本 | 格式化输出 | report.md |
+| 15-16 | **大模型自身** | 质量校验与修复 | 最终报告 |
 
 ###  重要原则
 
@@ -301,7 +299,7 @@ dependency:
 2. **大模型不调用外部API**：所有语义分析由执行Skill的Agent完成
 3. **数据驱动**：每个阶段的输出是下一阶段的输入
 4. **结构化传递**：使用JSON格式传递数据，确保数据完整性
-5. **用户确认必需**：步骤3和步骤5均需用户确认
+5. **用户确认必需**：步骤4和步骤5均需用户确认
 
 ### 步骤0：预检验证（必须执行）
 
@@ -378,35 +376,42 @@ python -c "from pathlib import Path; files=['assets/moe_pdfs_final.json', 'asset
 
 **输出**：`occupation_info.json`
 
-### 步骤3：用户确认环节（⚠️ 强制性暂停点）
+### 步骤3：ESCO/O*NET映射推断（大模型世界知识）
 
 > **MANDATORY - READ**: [`references/workflow_details.md`](references/workflow_details.md) 步骤3
-> 
-> ⚠️ **必须等待用户回复**：展示职业信息 → question工具确认 → 等待回复 → 继续步骤4
-
-**重要约束**：用户新增职业必须在职业大典中存在。
-
-### 步骤4：ESCO/O*NET映射推断（大模型世界知识）
-
-> **MANDATORY - READ**: [`references/workflow_details.md`](references/workflow_details.md) 步骤4
 
 **核心任务**：利用大模型世界知识推断ESCO和O*NET职业编码
 
 **输出**：`occupation_mapping_info.json`
 
-### 步骤5：本地文档查询（Python脚本）
+### 步骤4：用户确认环节（⚠️ 强制性暂停点）
+
+> **MANDATORY - READ**: [`references/workflow_details.md`](references/workflow_details.md) 步骤4
+> 
+> ⚠️ **必须等待用户回复**：确认面板展示中国职业+国际映射 → question工具确认 → 等待回复 → 继续步骤5
+
+**重要约束**：用户新增职业必须在职业大典中存在。
+
+### 步骤5：整合全部数据（Python脚本）
 
 > **MANDATORY - READ**: [`references/workflow_details.md`](references/workflow_details.md) 步骤5
 
-**执行命令**：`python scripts/fetch_local.py --mapping temp/occupation_mapping_info.json --output temp/international_data.md`
+**执行命令**：
+```bash
+python scripts/integrate_data.py \
+    --major temp/major_info.json \
+    --occupation temp/occupation_dict_data.json \
+    --mapping temp/occupation_mapping_info.json \
+    --output temp/combined_data.md
+```
 
-**输出**：`international_data.md`（Markdown格式）
+**整合内容**（4个数据源）：
+1. 专业教学标准（major_info.json → `# 专业教学标准`）
+2. 中国职业信息（occupation_dict_data.json → `# 职业信息`）
+3. 国际职业代码映射（mapping_info.json → `# 国际职业代码映射` 表格）
+4. ESCO/O*NET原始MD文档（按映射代码直接从assets/读取 → 按职业分节）
 
-### 步骤6：整合基础数据（Python脚本）
-
-**执行命令**：`python scripts/integrate_data.py ... --output temp/combined_data.md`
-
-**输出**：`combined_data.md`
+**输出**：`combined_data.md`（零提取、零转换，原始内容供大模型参考）
 
 **输出**：`major_info.json`，包含专业代码、名称、职业面向、培养目标等字段。
 
@@ -431,48 +436,7 @@ python -c "from pathlib import Path; files=['assets/moe_pdfs_final.json', 'asset
 职业编码: 4-03-02-04 | 职业名称: 西式面点师
 ```
 
-### 步骤3：用户确认环节
-
-> **本步骤由执行本Skill的Agent（大模型）完成**
-> 
-> **确认面板示例和处理方式详见**：[references/workflow_details.md](references/workflow_details.md) 步骤3
-
----
-
-> ⚠️ **MANDATORY - 必须等待用户回复**
-> 
-> 本步骤是**强制性暂停点**。Agent必须：
-> 1. 展示提取的职业信息表格
-> 2. 使用 `question` 工具展示确认选项
-> 3. **等待用户回复**（确认/修改/删除）
-> 4. 用户明确回复后才能继续步骤4
->
-> **禁止行为**：
-> - ❌ 展示信息后直接继续执行步骤4
-> - ❌ 以"结果显而易见"为由跳过确认
-> - ❌ 以"全流程测试"为由跳过确认
->
-> **正确示例**：
-> ```
-> 已提取职业信息：
-> | 序号 | 职业大典职业 | 代码 | 匹配来源 |
-> |------|-------------|------|----------|
-> | 1 | 数字媒体艺术专业人员 | 2-09-06-07 | 虚拟现实产品设计师 |
-> ...
-> 
-> 请确认以上职业信息是否正确？
-> [question工具展示选项：确认继续 / 需要修改 / 删除某项]
-> ```
-
----
-
-**任务**：展示提取的职业信息，等待用户确认。用户可确认、修改或删除职业。
-
-**重要约束**：若用户新增职业，该职业必须在职业大典中存在。
-
-**输出**：确认后的 `occupation_info.json`。
-
-### 步骤4：利用大模型世界知识推断ESCO/O*NET映射
+### 步骤3：ESCO/O*NET映射推断
 
 > **本步骤由执行本Skill的Agent（大模型）完成**
 > 
@@ -532,38 +496,76 @@ python -c "from pathlib import Path; files=['assets/moe_pdfs_final.json', 'asset
 
 **输出**：`occupation_mapping_info.json`
 
-### 步骤5：从本地文档获取详细内容
+### 步骤4：用户确认环节
 
-> 使用Python脚本查询本地ESCO和O*NET文档。
+> **本步骤由执行本Skill的Agent（大模型）完成**
 > 
-> **详细查询逻辑和文档缺失处理详见**：[references/workflow_details.md](references/workflow_details.md) 步骤5
+> **确认面板示例和处理方式详见**：[references/workflow_details.md](references/workflow_details.md) 步骤4
+
+---
+
+> ⚠️ **MANDATORY - 必须等待用户回复**
+> 
+> 本步骤是**强制性暂停点**。Agent必须：
+> 1. 展示提取的职业信息表格
+> 2. 确认面板同时展示中国职业信息（职业名称+编码+来源）和国际映射结果（ISCO/ESCO代码、SOC/O*NET代码、confidence、mapping_reason）作为参考
+> 3. 使用 `question` 工具展示确认选项（确认/修改/删除/新增/合并/查找）
+> 4. **等待用户回复**（确认/修改/删除）
+> 5. 用户明确回复后才能继续步骤5
+>
+> **禁止行为**：
+> - ❌ 展示信息后直接继续执行步骤5
+> - ❌ 以"结果显而易见"为由跳过确认
+> - ❌ 以"全流程测试"为由跳过确认
+>
+> **正确示例**：
+> ```
+> 已提取职业信息：
+> | 序号 | 职业大典职业 | 代码 | 匹配来源 |
+> |------|-------------|------|----------|
+> | 1 | 数字媒体艺术专业人员 | 2-09-06-07 | 虚拟现实产品设计师 |
+> ...
+> 
+> 国际映射参考：
+> | 职业名称 | ISCO/ESCO代码 | SOC/O*NET代码 | confidence |
+> |---------|--------------|---------------|------------|
+> | 数字媒体艺术专业人员 | 2529 | 27-1027.00 | medium |
+> ...
+> 
+> 请确认以上职业信息是否正确？
+> [question工具展示选项：确认继续 / 需要修改 / 删除某项]
+> ```
+
+---
+
+**任务**：展示提取的职业信息（同时展示国际映射结果作为参考），等待用户确认。用户可确认、修改、删除、新增、合并或查找职业。
+
+**重要约束**：若用户新增职业，该职业必须在职业大典中存在。
+
+**输出**：确认后的 `occupation_info.json`。
+
+### 步骤5：整合全部数据（Python脚本）
+
+> 使用 `scripts/integrate_data.py` 将JSON和原始MD文档合并。
+> 
+> **详细查询逻辑详见**：[references/workflow_details.md](references/workflow_details.md) 步骤5
 
 **执行命令**：
 ```bash
-python scripts/fetch_local.py \
+python scripts/integrate_data.py \
+  --major temp/major_info.json \
+  --occupation temp/occupation_dict_data.json \
   --mapping temp/occupation_mapping_info.json \
-  --output temp/international_data.md
+  --output temp/combined_data.md
 ```
 
 **脚本行为**：
-- 根据ESCO代码查询 `assets/esco_details_md/` 目录，直接读取原始MD内容
-- 根据O*NET代码查询 `assets/onet_details_md/` 目录，直接读取原始MD内容
-- 若文档缺失则展示警告，等待用户确认后继续
+- 读取 major_info.json、occupation_dict_data.json、mapping_info.json
+- 按映射代码读取 `assets/esco_details_md/` 和 `assets/onet_details_md/` 原始MD文档
+- 零提取、零转换，输出combined_data.md（Markdown格式）
+- 若文档缺失则在报告中标注数据完整性说明
 
-**输出**：`international_data.md`（Markdown格式），包含ESCO和O*NET职业详细信息。
-
-### 步骤6：整合基础数据
-
-将以上JSON文件和MD文件合并为 `combined_data.md`（Markdown格式），供大模型分析使用。
-
-```bash
-python scripts/integrate_data.py \
-  --major temp/major_info.json \
-  --occupation temp/occupation_info.json \
-  --mapping temp/occupation_mapping_info.json \
-  --international temp/international_data.md \
-  --output temp/combined_data.md
-```
+**输出**：`combined_data.md`（含专业教学标准、职业信息、国际映射、ESCO/O*NET原始文档）
 
 **输出格式**：
 ```markdown
@@ -597,7 +599,7 @@ python scripts/integrate_data.py \
 
 **输入文件**：`temp/combined_data.md`
 
-### 步骤7：职业面向语义解析
+### 步骤6：职业面向语义解析
 
 **任务**：从职业面向字段提取职业名称、岗位名称、工作任务列表
 
@@ -658,13 +660,13 @@ python scripts/integrate_data.py \
 - 参考学时：每领域48-144学时
 - 总学时：中职≥1200，高职≥1600
 
-### 步骤13：学习情境设计
+### 步骤12：学习情境设计
 
 > **MANDATORY - READ**: [`references/work_process_method.md`](references/work_process_method.md) **第六节**（情境设计：数量计算、命名规则、学时分配）+ 第2.3节（模板）
 
 **任务**：为每个学习领域设计3-8个情境，分配学时（16-32学时/情境）
 
-### 步骤14：输出结构化数据
+### 步驟13：输出结构化分析数据
 
 > **MANDATORY - READ**: [`references/analysis_data_template.json`](references/analysis_data_template.json) 完整格式规范 + [`references/analysis_data_template.json`](references/analysis_data_template.json) appendix.table_data_mapping（数据结构对应关系）
 
@@ -680,7 +682,7 @@ python scripts/integrate_data.py \
 
 ## 阶段三：格式化输出（Python脚本执行）
 
-### 步骤15：生成Markdown报告
+### 步骤14：生成Markdown报告
 
 ```bash
 python scripts/generate_report.py \
@@ -699,7 +701,7 @@ pandoc temp/report.md --reference-doc=references/reference.docx -o output/report
 
 ## 阶段四：自我校正
 
-### 步骤16：质量校验
+### 步驟15：质量校验
 
 Agent读取生成的报告，检查以下项：
 
@@ -714,12 +716,12 @@ Agent读取生成的报告，检查以下项：
 | 能力等级有递进 | 中 | 不得全为同一等级 |
 | 表格编号连续（表1→表11） | 中 | 无跳跃 |
 
-### 步骤17：问题修复
+### 步驟16：问题修复
 
 如发现问题：
 1. 修改 `analysis_data.json` 中对应字段
-2. 重新执行步骤15生成报告
-3. 重复步骤16验证
+2. 重新执行步骤14生成报告
+3. 重复步骤14验证
 4. 最多3次修复循环
 
 **修复后输出**：最终版 `report.md` 和 `report.docx`
@@ -733,27 +735,27 @@ Agent执行本Skill时，按以下清单逐项确认：
 ### 阶段一检查
 - [ ] 步骤1（Python脚本）：`major_info.json` 已生成，包含 `career_orientation`
 - [ ] 步骤2（大模型）：已加载职业大典文档，输出职业信息
-- [ ] 步骤3（大模型+用户）：已展示确认面板，**用户已回复确认**，`occupation_info.json` 已更新
-- [ ] 步骤4（大模型）：ESCO/O*NET映射已完成
-- [ ] 步骤5（Python脚本）：`international_data.md` 已生成（Markdown格式，如有缺失已警告）
-- [ ] 步骤6：基础数据已整合（combined_data.md，Markdown格式）
+- [ ] 步骤3（大模型）：ESCO/O*NET映射已完成
+- [ ] 步骤4（大模型+用户）：确认面板已展示中国职业+国际映射参考，**用户已回复确认**，`occupation_info.json` 已更新
+- [ ] 步骤5（Python脚本）：`combined_data.md` 已整合（4个数据源）
 
 ### 阶段二检查（大模型自身）
-- [ ] 步骤7：职业面向已解析
-- [ ] 步骤8：每个职业的每个工作任务已生成完整分析（job_tasks已生成）
-- [ ] 步骤9：典型工作任务已确定（typical_tasks已生成，related_tasks引用正确）
-- [ ] 步骤10：行动领域已划分，能力等级已设定
-- [ ] 步骤11：能力分析完成，表7/表8一致
-- [ ] 步骤12：学习领域已转换
-- [ ] 步骤13：学习情境已设计
-- [ ] 步骤14：`analysis_data.json` 已生成，包含job_tasks和typical_tasks
+- [ ] 步骤6：职业面向已解析
+- [ ] 步骤7：每个职业的每个工作任务已生成完整分析（job_tasks已生成）
+- [ ] 步骤8：典型工作任务已确定（typical_tasks已生成，related_tasks引用正确）
+- [ ] 步骤9：行动领域已划分，能力等级已设定
+- [ ] 步骤10：能力分析完成，表7/表8一致
+- [ ] 步骤11：学习领域已转换
+- [ ] 步骤12：学习情境已设计
+- [ ] 步骤13：`analysis_data.json` 已生成，包含job_tasks和typical_tasks
 
 ### 阶段三检查（Python脚本）
-- [ ] 步骤15：`report.md` 已生成
+- [ ] 步骤14：`report.md` 已生成
+
 
 ### 阶段四检查（大模型自身）
-- [ ] 步骤16：质量校验通过
-- [ ] 步骤17：如有问题已修复
+- [ ] 步驟15：质量校验通过
+- [ ] 步骤16：如有问题已修复
 
 ---
 
@@ -764,8 +766,7 @@ Agent执行本Skill时，按以下清单逐项确认：
 | `scripts/search_major.py` | 专业教学标准检索（支持PDF解析） | `python scripts/search_major.py --major "专业名称" --level "层次"` |
 | `scripts/pdf_parser.py` | PDF下载与解析 | `python scripts/pdf_parser.py --url "PDF_URL" --code "专业代码"` |
 | `scripts/major_catalog_mapper.py` | 专业目录映射（xlsx→大类→MD文件） | `python scripts/major_catalog_mapper.py` |
-| `scripts/fetch_local.py` | 本地ESCO/O*NET文档查询 | `python scripts/fetch_local.py --mapping mapping.json --output intl.json` |
-| `scripts/integrate_data.py` | 多源数据整合 | `python scripts/integrate_data.py --major major.json --occupation-code "代码" --occupation-name "名称"` |
+| `scripts/integrate_data.py` | 多源数据整合 | `python scripts/integrate_data.py --major major.json --mapping mapping.json --output combined.md` |
 | `scripts/generate_report.py` | Markdown 报告生成（表7/表8一致） | `python scripts/generate_report.py --data analysis.json --output report.md` |
 | `scripts/validate_report.py` | 报告验证与审校 | `python scripts/validate_report.py --report report.md --data analysis.json` |
 | `scripts/occupation_dict_loader.py` | 职业大典分块加载 | `get_occupation_dictionary('6-22-02')` |
@@ -802,7 +803,7 @@ pip install requests python-dotenv pypandoc pypdf pdfplumber
 | 职业匹配 | 中国代码与国际标准需大模型语义推断、不同体系名称差异大、由大模型进行语义理解 |
 | 本地化 | ESCO/O*NET数据为英文需翻译、注意专业术语准确性、可保留双语版本 |
 | 层次适配 | 中职→操作技能、高职→技术应用、职教本科→管理优化 |
-| 用户确认 | 步骤3必须让用户确认职业信息、步骤5文档缺失需用户确认后继续 |
+| 用户确认 | 步骤4必须让用户确认职业信息（同时展示国际映射参考） |
 
 ## 故障排除
 
@@ -824,11 +825,11 @@ pip install requests python-dotenv pypandoc pypdf pdfplumber
 | 文件 | 用途 | 加载时机 |
 |------|------|----------|
 | `references/precheck_guide.md` | 预检验证详细指南 | 步骤0 **按需** 加载 |
-| `references/workflow_details.md` | 步骤1-6详细执行命令和输出格式 | 阶段一 **按需** 参考 |
+| `references/workflow_details.md` | 步驟1-5详细执行命令和输出格式 | 阶段一 **按需** 参考 |
 | `references/work_process_method.md` | 行动领域/学习领域/学习情境描述模板 | 步骤10/12/13 **必须** 加载对应章节 |
-| `references/analysis_data_template.json` | analysis_data.json 完整格式规范 | 步骤14 **必须** 参考 |
-| `references/occupation_mapping_template.json` | 映射输出格式规范 | 步骤4 参考 |
-| `references/report_template.md` | Markdown 报告模板（七部分结构） | 步骤15 **必须** 加载 |
+| `references/analysis_data_template.json` | analysis_data.json 完整格式规范 | 步骤13 **必须** 参考 |
+| `references/occupation_mapping_template.json` | 映射输出格式规范 | 步驟3 参考 |
+| `references/report_template.md` | Markdown 报告模板（七部分结构） | 步骤14 **必须** 加载 |
 | `references/troubleshooting.md` | 故障排除详细指南 | 遇到问题时 **按需** 加载 |
-| `references/reference.docx` | Word 样式模板（自定义格式） | 步骤15 **可选** |
+| `references/reference.docx` | Word 样式模板（自定义格式） | 步骤14 **可选** |
 

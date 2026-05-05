@@ -50,33 +50,6 @@ if '汽车维修工' in content:
 
 ---
 
-### 1.3 IMA 知识库
-
-| 问题 | 原因 | 解决方案 |
-|------|------|----------|
-| IMA 返回空结果 | 未导入数据或关键词不匹配 | 确认 ID、用精确关键词、用 API fallback |
-| IMA 认证失败 | 环境变量未配置 | 检查 `.env` 文件 |
-| 知识库 ID 无效 | ID 格式过时 | 调用 `get_addable_knowledge_base_list` 获取最新 ID |
-
-**调试命令**：
-
-```bash
-# 测试 IMA 连接
-python scripts/fetch_via_ima.py --occupation "motor vehicle mechanic" --source esco
-
-# 强制使用 API（绕过 IMA）
-python scripts/fetch_via_ima.py --occupation "motor vehicle mechanic" --no-ima
-```
-
-**检查清单**：
-
-1. ✅ `.env` 文件存在
-2. ✅ `IMA_OPENAPI_CLIENTID` 已设置
-3. ✅ `IMA_OPENAPI_APIKEY` 已设置
-4. ✅ 知识库 ID 正确（参考 `ima_config.json`）
-
----
-
 ### 1.4 报告生成
 
 | 问题 | 原因 | 解决方案 |
@@ -130,15 +103,11 @@ pandoc temp/report.md --reference-doc=references/reference.docx -o output/report
 
 ## 二、自动回退机制
 
-```
-IMA 知识库 → 官方 API → Web 搜索 → 报告错误
-```
-
 当主要方法失败时，系统会自动尝试备选方案：
 
-1. **IMA 知识库失败** → 尝试官方 API
-2. **官方 API 失败** → 尝试 Web 搜索
-3. **所有方法失败** → 报告错误，保留已获取的数据
+1. **本地文档查询失败** → 检查 `assets/esco_details_md/` 和 `assets/onet_details_md/` 是否存在
+2. **MD文档不存在** → 报告警告，用户确认后继续
+3. **所有本地文档缺失** → 报告错误，保留已获取的数据
 
 ---
 

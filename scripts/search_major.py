@@ -434,14 +434,14 @@ def get_mapping_sheet_name(level: Optional[str] = None) -> str:
     level_lower = (level or '').lower()
     
     if '中职' in level_lower or '中等' in level_lower:
-        return '中职专业-职业对照'
+        return '中职-专业职业对照'
     elif '高职' in level_lower or '专科' in level_lower or '高等' in level_lower:
-        return '高职专科专业-职业对照'
+        return '高职专业-专业职业对照'
     elif '本科' in level_lower:
-        return '职业本科专业-职业对照'
+        return '职教本科-专业职业对照'
     else:
         # 默认尝试中职
-        return '中职专业-职业对照'
+        return '中职-专业职业对照'
 
 
 def query_occupation_mapping(

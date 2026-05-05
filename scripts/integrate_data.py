@@ -3,20 +3,14 @@
 """
 数据整合脚本
 
-整合专业教学标准、职业信息、映射信息、国际数据等多方面数据
+合并专业教学标准、职业信息、职业映射（含ESCO/O*NET原始文档）等内容，输出Markdown格式combined_data.md
 
-功能：
-1. 合并所有基础数据到一个统一的JSON文件
-2. 支持SKILL.md中描述的参数格式
-3. 输出base_data.json供后续语义分析使用
-
-用法（SKILL.md描述的参数格式）：
+用法：
     python scripts/integrate_data.py \
         --major temp/major_info.json \
-        --occupation temp/occupation_info.json \
+        --occupation temp/occupation_dict_data.json \
         --mapping temp/occupation_mapping_info.json \
-        --international temp/international_data.json \
-        --output temp/base_data.json
+        --output temp/combined_data.md
 """
 
 import json
@@ -24,10 +18,6 @@ import argparse
 from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
-
-
-INTERNATIONAL_DATA_DIR = "temp/international_data"
-OCCUPATIONS_DIR = f"{INTERNATIONAL_DATA_DIR}/occupations"
 
 
 def json_to_md(data: Dict, section_name: str) -> str:
@@ -147,398 +137,279 @@ def load_json(file_path: Path, required: bool = False) -> Dict:
         print(f"[ERROR] 读取文件失败 {file_path}: {e}")
         return {}
 
-def merge_tasks(china_data: Dict, esco_data: Dict, onet_data: Dict) -> List[Dict]:
-    """合并工作任务"""
-    tasks = []
-    
-    # 从中国职业大典提取
-    if china_data.get('occupations'):
-        for occ in china_data['occupations']:
-            if occ.get('main_tasks'):
-                for task in occ['main_tasks']:
-                    tasks.append({
-                        "source": "中国职业大典",
-                        "task": task,
-                        "occupation": occ.get('name')
-                    })
-    
-    # 从ESCO提取
-    if esco_data.get('tasks'):
-        for task in esco_data['tasks']:
-            tasks.append({
-                "source": "ESCO",
-                "task": task.get('description', task.get('task', '')),
-                "occupation": esco_data.get('occupation_name')
-            })
-    
-    # 从O*NET提取
-    if onet_data.get('tasks'):
-        for task in onet_data['tasks']:
-            tasks.append({
-                "source": "O*NET",
-                "task": task.get('task', ''),
-                "occupation": onet_data.get('occupation_name')
-            })
-    
-    return tasks
 
-def merge_skills(esco_data: Dict, onet_data: Dict) -> Dict:
-    """合并技能要求"""
-    skills = {
-        "esco": [],
-        "onet": []
-    }
-    
-    if esco_data.get('skills'):
-        skills['esco'] = esco_data['skills']
-    
-    if onet_data.get('skills'):
-        skills['onet'] = onet_data['skills']
-    
-    return skills
+# =============================================================================
+# 国际职业文档读取（从 fetch_local.py 迁移）
+# =============================================================================
 
-def merge_knowledge(esco_data: Dict, onet_data: Dict) -> Dict:
-    """合并知识要求"""
-    knowledge = {
-        "esco": [],
-        "onet": []
-    }
-    
-    if esco_data.get('knowledge'):
-        knowledge['esco'] = esco_data['knowledge']
-    
-    if onet_data.get('knowledge'):
-        knowledge['onet'] = onet_data['knowledge']
-    
-    return knowledge
-
-def merge_work_context(esco_data: Dict, onet_data: Dict) -> Dict:
-    """合并工作情境"""
-    context = {
-        "esco": [],
-        "onet": []
-    }
-    
-    if esco_data.get('work_context'):
-        context['esco'] = esco_data['work_context']
-    
-    if onet_data.get('work_context'):
-        context['onet'] = onet_data['work_context']
-    
-    return context
+def build_esco_index(esco_dir: Path) -> Dict[str, List[Path]]:
+    """构建ESCO文件名索引（一个代码可能对应多个文件）"""
+    index = {}
+    if esco_dir.exists():
+        for f in esco_dir.glob("*.md"):
+            # 文件名格式: {ISCO代码}.{序号}.md（如 7231.1.md）
+            # 提取ISCO代码（点号前的部分）
+            stem = f.stem
+            if '.' in stem:
+                isco_code = stem.split('.')[0]
+            else:
+                isco_code = stem
+            
+            if isco_code not in index:
+                index[isco_code] = []
+            index[isco_code].append(f)
+    return index
 
 
-def save_international_data(
-    occupation_code: str,
-    occupation_name: str,
-    esco_data: Dict,
-    onet_data: Dict,
-    project_root: Path
-) -> Dict:
+def build_onet_index(onet_dir: Path) -> Dict[str, Path]:
+    """构建O*NET文件名索引"""
+    index = {}
+    if onet_dir.exists():
+        for f in onet_dir.glob("*.md"):
+            code = f.stem
+            index[code] = f
+    return index
+
+
+def find_esco_files(esco_dir: Path, esco_index: Dict[str, List[Path]], esco_code: str) -> List[Path]:
     """
-    保存国际职业数据到独立临时文件
-    
-    将 ESCO 和 O*NET 详细数据保存到 temp/international_data/occupations/ 目录，
-    便于后续工作任务分析、能力分析等过程提取使用。
+    查找ESCO文件（一个代码可能对应多个文件）
     
     Args:
-        occupation_code: 中国职业代码
-        occupation_name: 中国职业名称
-        esco_data: ESCO 数据
-        onet_data: O*NET 数据
-        project_root: 项目根目录
+        esco_dir: ESCO文档目录
+        esco_index: ESCO文件名索引
+        esco_code: ESCO/ISCO代码（如 7231 或 2512.9）
     
     Returns:
-        包含文件路径和摘要信息的字典
+        文件路径列表
     """
-    result = {
-        "china_code": occupation_code,
-        "china_name": occupation_name,
-        "isco_code": "",
-        "onet_code": "",
-        "esco_file": None,
-        "onet_file": None,
-        "key_skills": [],
-        "key_tasks": [],
-        "key_knowledge": []
-    }
+    code = esco_code.strip()
     
-    # 创建目录
-    occupations_dir = project_root / OCCUPATIONS_DIR
-    occupations_dir.mkdir(parents=True, exist_ok=True)
+    exact_file = esco_dir / f"{code}.md"
+    if exact_file.exists():
+        return [exact_file]
     
-    # 保存 ESCO 数据
-    if esco_data and esco_data.get('sources'):
-        esco_file_path = f"{OCCUPATIONS_DIR}/{occupation_code}_esco.json"
-        esco_full_path = project_root / esco_file_path
-        
-        # 提取 ESCO 相关信息
-        esco_source = esco_data['sources'].get('ESCO-API') or esco_data['sources'].get('IMA-ESCO') or {}
-        
-        # 构建 ESCO 数据结构
-        esco_structured = {
-            "source": "ESCO",
-            "occupation": {
-                "china_code": occupation_code,
-                "china_name": occupation_name,
-                "isco_code": esco_source.get('code', '')
-            },
-            "title": esco_source.get('title', ''),
-            "description": esco_source.get('description', ''),
-            "essential_skills": extract_skills(esco_source, 'esco'),
-            "tasks": extract_tasks(esco_source, 'esco'),
-            "knowledge": extract_knowledge(esco_source, 'esco'),
-            "raw": esco_source
-        }
-        
-        with open(esco_full_path, 'w', encoding='utf-8') as f:
-            json.dump(esco_structured, f, ensure_ascii=False, indent=2)
-        
-        result["esco_file"] = esco_file_path
-        result["isco_code"] = esco_source.get('code', '')
-        result["key_skills"].extend([s.get('name', s) if isinstance(s, dict) else s for s in esco_structured["essential_skills"][:8]])
-        result["key_tasks"].extend([t.get('description', t) if isinstance(t, dict) else t for t in esco_structured["tasks"][:5]])
+    if '.' in code:
+        isco_code = code.split('.')[0]
+        if isco_code in esco_index:
+            return sorted(esco_index[isco_code])
     
-    # 保存 O*NET 数据
-    if onet_data and onet_data.get('sources'):
-        onet_file_path = f"{OCCUPATIONS_DIR}/{occupation_code}_onet.json"
-        onet_full_path = project_root / onet_file_path
-        
-        # 提取 O*NET 相关信息
-        onet_source = onet_data['sources'].get('ONET-API') or onet_data['sources'].get('IMA-ONET') or {}
-        
-        # 构建 O*NET 数据结构
-        onet_structured = {
-            "source": "O*NET",
-            "occupation": {
-                "china_code": occupation_code,
-                "china_name": occupation_name,
-                "onet_code": onet_source.get('code', '')
-            },
-            "title": onet_source.get('title', ''),
-            "description": onet_source.get('summary', {}).get('description', '') if isinstance(onet_source.get('summary'), dict) else '',
-            "tasks": extract_tasks(onet_source, 'onet'),
-            "skills": extract_skills(onet_source, 'onet'),
-            "knowledge": extract_knowledge(onet_source, 'onet'),
-            "abilities": extract_abilities(onet_source),
-            "work_activities": onet_source.get('summary', {}).get('work_activities', []) if isinstance(onet_source.get('summary'), dict) else [],
-            "raw": onet_source
-        }
-        
-        with open(onet_full_path, 'w', encoding='utf-8') as f:
-            json.dump(onet_structured, f, ensure_ascii=False, indent=2)
-        
-        result["onet_file"] = onet_file_path
-        result["onet_code"] = onet_source.get('code', '')
-        
-        # 合并关键信息（如果 ESCO 没有提供）
-        if not result["key_skills"]:
-            result["key_skills"].extend([s.get('name', s) if isinstance(s, dict) else s for s in onet_structured["skills"][:8]])
-        if not result["key_tasks"]:
-            result["key_tasks"].extend([t.get('description', t) if isinstance(t, dict) else t for t in onet_structured["tasks"][:5]])
-        result["key_knowledge"].extend([k.get('name', k) if isinstance(k, dict) else k for k in onet_structured["knowledge"][:5]])
-    
-    return result
-
-
-def extract_skills(source_data: Dict, source_type: str) -> List[Dict]:
-    """从源数据中提取技能"""
-    if not source_data:
-        return []
-    
-    if source_type == 'esco':
-        raw_skills = source_data.get('skills', source_data.get('essential_skills', []))
-        return [{"skill_name": s.get('name', s) if isinstance(s, dict) else s, "importance": s.get('importance', 'essential') if isinstance(s, dict) else 'essential'} for s in raw_skills[:15]]
-    
-    if source_type == 'onet':
-        raw_skills = source_data.get('skills', [])
-        if isinstance(source_data.get('summary'), dict):
-            raw_skills = source_data['summary'].get('skills', raw_skills)
-        return [{"skill_name": s.get('name', s) if isinstance(s, dict) else s, "importance": s.get('importance', '') if isinstance(s, dict) else ''} for s in raw_skills[:15]]
+    if code in esco_index:
+        return sorted(esco_index[code])
     
     return []
 
 
-def extract_tasks(source_data: Dict, source_type: str) -> List[Dict]:
-    """从源数据中提取任务"""
-    if not source_data:
-        return []
-    
-    if source_type == 'esco':
-        raw_tasks = source_data.get('tasks', [])
-        return [{"task_description": t.get('description', t) if isinstance(t, dict) else t} for t in raw_tasks[:10]]
-    
-    if source_type == 'onet':
-        raw_tasks = source_data.get('tasks', [])
-        if isinstance(source_data.get('summary'), dict):
-            raw_tasks = source_data['summary'].get('tasks', raw_tasks)
-        return [{"task_description": t.get('description', t.get('task', t)) if isinstance(t, dict) else t, "importance": t.get('importance', '') if isinstance(t, dict) else ''} for t in raw_tasks[:10]]
-    
-    return []
-
-
-def extract_knowledge(source_data: Dict, source_type: str) -> List[Dict]:
-    """从源数据中提取知识要求"""
-    if not source_data:
-        return []
-    
-    if source_type == 'esco':
-        raw_knowledge = source_data.get('knowledge', [])
-        return [{"knowledge_area": k.get('name', k) if isinstance(k, dict) else k} for k in raw_knowledge[:10]]
-    
-    if source_type == 'onet':
-        raw_knowledge = source_data.get('knowledge', [])
-        if isinstance(source_data.get('summary'), dict):
-            raw_knowledge = source_data['summary'].get('knowledge', raw_knowledge)
-        return [{"knowledge_area": k.get('name', k) if isinstance(k, dict) else k} for k in raw_knowledge[:10]]
-    
-    return []
-
-
-def extract_abilities(source_data: Dict) -> List[Dict]:
-    """从 O*NET 数据中提取能力"""
-    if not source_data:
-        return []
-    
-    raw_abilities = source_data.get('abilities', [])
-    if isinstance(source_data.get('summary'), dict):
-        raw_abilities = source_data['summary'].get('abilities', raw_abilities)
-    
-    return [{"ability_name": a.get('name', a) if isinstance(a, dict) else a} for a in raw_abilities[:10]]
-
-
-
-def integrate_data(
-    china_path: Optional[str],
-    esco_path: Optional[str],
-    onet_path: Optional[str],
-    output_path: str,
-    occupation_code: Optional[str] = None,
-    occupation_name: Optional[str] = None
-) -> Dict:
+def find_onet_file(onet_index: Dict[str, Path], onet_code: str) -> Optional[Path]:
     """
-    整合三个数据源的职业信息
+    查找O*NET文件
     
     Args:
-        china_path: 中国职业大典数据路径
-        esco_path: ESCO数据路径
-        onet_path: O*NET数据路径
-        output_path: 输出文件路径
-        occupation_code: 中国职业代码（用于保存国际数据）
-        occupation_name: 中国职业名称（用于保存国际数据）
+        onet_index: O*NET文件名索引
+        onet_code: O*NET代码（如 49-3023.00）
     
     Returns:
-        整合后的数据
+        文件路径，如果未找到返回None
     """
-    # 确定项目根目录（修正路径计算）
-    script_dir = Path(__file__).parent
-    project_root = script_dir.parent  # scripts/ -> occupation-analysis/
+    code = onet_code.strip()
+    return onet_index.get(code)
+
+
+def read_file(file_path: Path) -> Optional[str]:
+    """读取文件内容（原始Markdown）"""
+    if not file_path or not file_path.exists():
+        return None
     
-    # 加载数据
-    china_data: Dict = {}
-    esco_data: Dict = {}
-    onet_data: Dict = {}
-    
-    if china_path:
-        china_full_path = project_root / china_path
-        china_data = load_json(china_full_path)
-    
-    if esco_path:
-        esco_full_path = project_root / esco_path
-        esco_data = load_json(esco_full_path)
-    
-    if onet_path:
-        onet_full_path = project_root / onet_path
-        onet_data = load_json(onet_full_path)
-    
-    # 整合数据（仅合并，不做语义推断）
-    integrated = {
-        "china_data": china_data,
-        "international_data": {
-            "esco": esco_data,
-            "onet": onet_data
-        },
-        "merged": {
-            "tasks": merge_tasks(china_data, esco_data, onet_data),
-            "skills": merge_skills(esco_data, onet_data),
-            "knowledge": merge_knowledge(esco_data, onet_data),
-            "work_context": merge_work_context(esco_data, onet_data)
-        }
-    }
-    
-    # Python脚本只做数据搬运，语义推断由大模型完成（步骤7-14）
-    
-    integrated["hours_summary"] = {
-        "data_sources": ["china", "esco", "onet"]
-    }
-    
-    # 保存国际数据到独立临时文件，供后续分析任务使用
-    international_details = None
-    if occupation_code and occupation_name:
-        international_details = save_international_data(
-            occupation_code=occupation_code,
-            occupation_name=occupation_name,
-            esco_data=esco_data,
-            onet_data=onet_data,
-            project_root=project_root
-        )
-        integrated["international_details"] = international_details
-        print(f"[OK] 国际数据已保存到: {INTERNATIONAL_DATA_DIR}/occupations/{occupation_code}_*.json")
-    
-    # 保存输出（带错误处理）
-    save_success = False
     try:
-        output_full_path = project_root / output_path
-        output_full_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_full_path, 'w', encoding='utf-8') as f:
-            json.dump(integrated, f, ensure_ascii=False, indent=2)
-        print(f"[OK] 整合数据已保存到: {output_full_path}")
-        save_success = True
-    except IOError as e:
-        error_msg = f"保存文件失败: {e}"
-        print(f"[ERROR] {error_msg}")
-        integrated['save_error'] = error_msg
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except (IOError, OSError, UnicodeDecodeError, PermissionError) as e:
+        print(f"[ERROR] 读取文件失败 {file_path}: {e}")
+        return None
+    except Exception as e:
+        print(f"[ERROR] 未知错误读取文件 {file_path}: {e}")
+        raise
+
+
+def parse_mapping_results(mapping_data: Dict) -> List[Dict]:
+    """
+    解析映射信息，提取mapping_results列表
     
-    integrated['save_success'] = save_success
-    return integrated
+    支持多种输入格式：
+    - {'mappings': [...]}
+    - {'mapping_results': [...]}
+    - {'results': [...]}
+    - {'occupation_mapping': {...}}
+    - 直接是列表
+    """
+    if isinstance(mapping_data, list):
+        return mapping_data
+    elif isinstance(mapping_data, dict):
+        for key in ('mapping_results', 'results', 'mappings'):
+            if key in mapping_data:
+                return mapping_data[key]
+        if 'occupation_mapping' in mapping_data:
+            return _convert_occupation_mapping_format(mapping_data)
+    
+    print("[WARNING] 未识别的映射信息格式")
+    return []
+
+
+def _convert_occupation_mapping_format(mapping_info: Dict) -> List[Dict]:
+    """兼容occupation_mapping格式的转换"""
+    occupation_mapping = mapping_info.get('occupation_mapping', {})
+    results = []
+    for china_code, data in occupation_mapping.items():
+        if isinstance(data, dict):
+            results.append({
+                'china_code': china_code,
+                'china_name': data.get('china_name', ''),
+                'esco_code': data.get('esco_code', ''),
+                'esco_name': data.get('esco_name', ''),
+                'onet_code': data.get('onet_code', ''),
+                'onet_name': data.get('onet_name', ''),
+                'confidence': data.get('mapping_confidence', 'unknown'),
+                'mapping_reason': data.get('mapping_reason', ''),
+            })
+    return results
+
+
+def build_mapping_section(mapping_results: List[Dict]) -> str:
+    """
+    构建国际职业代码映射表格章节
+    
+    Args:
+        mapping_results: 解析后的映射结果列表
+    
+    Returns:
+        Markdown字符串
+    """
+    lines = [
+        "# 国际职业代码映射",
+        "",
+        "| 中国代码 | 中国名称 | ISCO代码 | ESCO名称 | SOC代码 | O*NET名称 | confidence | mapping_reason |",
+        "|----------|----------|----------|----------|---------|-----------|------------|----------------|",
+    ]
+    
+    for m in mapping_results:
+        lines.append(
+            f"| {m.get('china_code', '')} | {m.get('china_name', '')} "
+            f"| {m.get('esco_code', '')} | {m.get('esco_name', '')} "
+            f"| {m.get('onet_code', '')} | {m.get('onet_name', '')} "
+            f"| {m.get('confidence', '')} | {m.get('mapping_reason', '')} |"
+        )
+    
+    lines.append("")
+    return "\n".join(lines)
+
+
+def build_occupation_sections(
+    mapping_results: List[Dict],
+    esco_dir: Path,
+    esco_index: Dict[str, List[Path]],
+    onet_index: Dict[str, Path],
+) -> tuple:
+    """
+    按职业分节输出国际原始MD内容
+    
+    Args:
+        mapping_results: 解析后的映射结果列表
+        esco_dir: ESCO文档目录
+        esco_index: ESCO文件名索引
+        onet_index: O*NET文件名索引
+    
+    Returns:
+        (markdown_sections: List[str], stats: Dict) 元组
+    """
+    sections = []
+    stats = {"esco_found": 0, "esco_missing": 0, "onet_found": 0, "onet_missing": 0}
+    
+    for m in mapping_results:
+        china_code = m.get('china_code', '')
+        china_name = m.get('china_name', '')
+        esco_code = m.get('esco_code', '')
+        onet_code = m.get('onet_code', '')
+        
+        if not esco_code and not onet_code:
+            continue
+        
+        lines = [f"# {china_code} {china_name}", ""]
+        
+        # ESCO文档部分
+        if esco_code:
+            lines.append("### ESCO文档")
+            lines.append("")
+            
+            esco_files = find_esco_files(esco_dir, esco_index, esco_code)
+            if esco_files:
+                stats["esco_found"] += len(esco_files)
+                print(f"[OK] 找到 {len(esco_files)} 个ESCO文档 (职业: {china_name}, 代码: {esco_code})")
+                lines.append(f"**ESCO代码**: {esco_code}")
+                lines.append("")
+                for esco_file in esco_files:
+                    content = read_file(esco_file)
+                    if content:
+                        lines.append(f"#### 文档 {esco_file.name}")
+                        lines.append("")
+                        lines.append(content)
+                        lines.append("")
+                    else:
+                        print(f"[WARNING] 读取ESCO文件失败: {esco_file}")
+            else:
+                stats["esco_missing"] += 1
+                print(f"[WARNING] 未找到ESCO文档: {esco_code}")
+                lines.append(f"**状态**: 未找到文档（代码: {esco_code}）")
+                lines.append("")
+        
+        # O*NET文档部分
+        if onet_code:
+            lines.append("### O*NET文档")
+            lines.append("")
+            
+            onet_file = find_onet_file(onet_index, onet_code)
+            if onet_file:
+                stats["onet_found"] += 1
+                print(f"[OK] 找到O*NET文档 (职业: {china_name}, 代码: {onet_code})")
+                lines.append(f"**O*NET代码**: {onet_code}")
+                lines.append("")
+                content = read_file(onet_file)
+                if content:
+                    lines.append(f"#### 文档 {onet_file.name}")
+                    lines.append("")
+                    lines.append(content)
+                    lines.append("")
+                else:
+                    print(f"[WARNING] 读取O*NET文件失败: {onet_file}")
+            else:
+                stats["onet_missing"] += 1
+                print(f"[WARNING] 未找到O*NET文档: {onet_code}")
+                lines.append(f"**状态**: 未找到文档（代码: {onet_code}）")
+                lines.append("")
+        
+        sections.append("\n".join(lines))
+    
+    return sections, stats
+
 
 def main():
     parser = argparse.ArgumentParser(
         description='整合职业数据',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-示例（推荐格式）:
-    # 使用SKILL.md描述的参数格式（输出为MD格式）
-    python scripts/integrate_data.py \
-        --major temp/major_info.json \
-        --occupation temp/occupation_info.json \
-        --mapping temp/occupation_mapping_info.json \
-        --international temp/international_data.json \
+示例:
+    python scripts/integrate_data.py \\
+        --major temp/major_info.json \\
+        --occupation temp/occupation_dict_data.json \\
+        --mapping temp/occupation_mapping_info.json \\
         --output temp/combined_data.md
-
-示例（旧格式，兼容）:
-    python scripts/integrate_data.py \
-        --china temp/occupation_info.json \
-        --esco temp/esco_data.json \
-        --onet temp/onet_data.json \
-        --output temp/integrated_data.md
         """
     )
     
-    # 新参数（SKILL.md描述的格式）
     parser.add_argument('--major', '-M', help='专业教学标准数据路径 (major_info.json)')
-    parser.add_argument('--occupation', '-O', help='职业信息数据路径 (occupation_info.json)')
+    parser.add_argument('--occupation', '-O', help='职业信息数据路径 (occupation_dict_data.json)')
     parser.add_argument('--mapping', help='ESCO/O*NET映射信息路径 (occupation_mapping_info.json)')
-    parser.add_argument('--international', '-I', help='国际数据路径 (international_data.json)')
     
-    # 旧参数（兼容）
-    parser.add_argument('--china', '-c', help='[旧参数] 中国职业大典数据路径')
-    parser.add_argument('--esco', '-e', help='[旧参数] ESCO数据路径')
-    parser.add_argument('--onet', '-o', help='[旧参数] O*NET数据路径')
-    
-    parser.add_argument('--output', '-out', default='temp/base_data.json', help='输出文件路径')
-    parser.add_argument('--occupation-code', help='中国职业代码（用于保存国际数据到独立文件）')
-    parser.add_argument('--occupation-name', help='中国职业名称（用于保存国际数据到独立文件）')
+    parser.add_argument('--output', '-out', default='temp/combined_data.md', help='输出文件路径')
     
     args = parser.parse_args()
     
@@ -546,79 +417,85 @@ def main():
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
     
-    # 新参数格式：整合所有基础数据
-    if args.major or args.occupation or args.mapping or args.international:
-        sections = []
+    if not (args.major or args.occupation or args.mapping):
+        print("[ERROR] 必须提供至少一个数据源参数: --major, --occupation, --mapping")
+        return
+    
+    sections = []
+    
+    # 加载专业教学标准
+    if args.major:
+        major_path = project_root / args.major if not Path(args.major).is_absolute() else Path(args.major)
+        major_data = load_json(major_path, required=True)
+        if major_data:
+            sections.append(json_to_md(major_data, "专业教学标准"))
+            print(f"[OK] 加载专业教学标准: {major_path}")
+    
+    # 加载职业信息
+    if args.occupation:
+        occ_path = project_root / args.occupation if not Path(args.occupation).is_absolute() else Path(args.occupation)
+        occ_data = load_json(occ_path, required=True)
+        if occ_data:
+            sections.append(json_to_md(occ_data, "职业信息"))
+            print(f"[OK] 加载职业信息: {occ_path}")
+    
+    # 处理映射信息：生成国际职业代码映射表格 + 按职业分节的原始MD内容
+    if args.mapping:
+        mapping_path = project_root / args.mapping if not Path(args.mapping).is_absolute() else Path(args.mapping)
+        mapping_raw = load_json(mapping_path, required=True)
         
-        if args.major:
-            major_path = project_root / args.major if not Path(args.major).is_absolute() else Path(args.major)
-            major_data = load_json(major_path, required=True)
-            if major_data:
-                sections.append(json_to_md(major_data, "专业教学标准"))
-                print(f"[OK] 加载专业教学标准: {major_path}")
-        
-        if args.occupation:
-            occ_path = project_root / args.occupation if not Path(args.occupation).is_absolute() else Path(args.occupation)
-            occ_data = load_json(occ_path, required=True)
-            if occ_data:
-                sections.append(json_to_md(occ_data, "职业信息"))
-                print(f"[OK] 加载职业信息: {occ_path}")
-        
-        if args.international:
-            int_path = project_root / args.international if not Path(args.international).is_absolute() else Path(args.international)
-            if int_path.suffix == '.md':
-                with open(int_path, 'r', encoding='utf-8') as f:
-                    int_content = f.read()
-                sections.append(int_content)
-                print(f"[OK] 加载国际数据（MD格式）: {int_path}")
+        if mapping_raw:
+            mapping_results = parse_mapping_results(mapping_raw)
+            
+            if mapping_results:
+                # 构建索引
+                esco_dir = project_root / "assets" / "esco_details_md"
+                onet_dir = project_root / "assets" / "onet_details_md"
+                esco_index = build_esco_index(esco_dir)
+                onet_index = build_onet_index(onet_dir)
+                
+                # 生成映射表格
+                sections.append(build_mapping_section(mapping_results))
+                print(f"[OK] 生成国际职业代码映射表格 ({len(mapping_results)} 条)")
+                
+                # 生成按职业分节的原始MD内容
+                occ_sections, stats = build_occupation_sections(
+                    mapping_results, esco_dir, esco_index, onet_index
+                )
+                sections.extend(occ_sections)
+                print(
+                    f"[OK] 生成职业原始MD章节: "
+                    f"ESCO({stats['esco_found']} found, {stats['esco_missing']} missing), "
+                    f"O*NET({stats['onet_found']} found, {stats['onet_missing']} missing)"
+                )
             else:
-                int_data = load_json(int_path, required=True)
-                if int_data:
-                    sections.append(json_to_md(int_data, "国际职业数据"))
-                    print(f"[OK] 加载国际数据（JSON格式）: {int_path}")
-        
-        # 添加元数据
-        metadata = f"""---
+                print("[WARNING] 映射信息中无有效映射结果")
+    
+    # 添加元数据
+    metadata = f"""---
 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 数据格式: Markdown
 ---"""
-        
-        # 合并所有章节
-        combined_md = metadata + "\n\n" + "\n\n---\n\n".join(sections)
-        
-        # 验证数据完整性
-        validate_combined_data(combined_md)
-        
-        # 保存输出（自动改为.md后缀）
-        output_path = project_root / args.output if not Path(args.output).is_absolute() else Path(args.output)
-        if output_path.suffix == '.json':
-            output_path = output_path.with_suffix('.md')
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(combined_md)
-        
-        print(f"\n[OK] 基础数据已整合到: {output_path}")
-        print(f"     - 章节数量: {len(sections)}")
-        print(f"     - 文件大小: {len(combined_md)} 字符")
-        return
     
-    # 旧参数格式：兼容处理
-    result = integrate_data(
-        china_path=args.china,
-        esco_path=args.esco,
-        onet_path=args.onet,
-        output_path=args.output,
-        occupation_code=args.occupation_code,
-        occupation_name=args.occupation_name
-    )
+    # 合并所有章节
+    combined_md = metadata + "\n\n" + "\n\n---\n\n".join(sections)
     
-    print(f"\n数据整合完成")
-    print(f"- 工作任务: {len(result['merged']['tasks'])} 条")
-    print(f"- 技能: {len(result['merged']['skills'])} 条")
-    print(f"- 知识: {len(result['merged']['knowledge'])} 条")
-    if result.get('international_details'):
-        print(f"- 国际数据文件: 已保存")
+    # 验证数据完整性
+    validate_combined_data(combined_md)
+    
+    # 保存输出
+    output_path = project_root / args.output if not Path(args.output).is_absolute() else Path(args.output)
+    if output_path.suffix == '.json':
+        output_path = output_path.with_suffix('.md')
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(combined_md)
+    
+    print(f"\n[OK] 基础数据已整合到: {output_path}")
+    print(f"     - 章节数量: {len(sections)}")
+    print(f"     - 文件大小: {len(combined_md)} 字符")
+
 
 if __name__ == '__main__':
     main()
