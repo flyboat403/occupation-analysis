@@ -8,6 +8,7 @@
 2. 表1岗位与表2对应岗位一致
 3. 表4覆盖表2所有典型任务
 4. 表7与表8能力编号一致
+5. job_tasks字段完整性及与表1/表2/表3的数据源分离
 
 用法：
     python scripts/validate_report.py --report temp/report.md --data temp/analysis_data.json
@@ -301,6 +302,163 @@ def validate_domain_hours_range(data: Dict) -> Tuple[bool, List[str]]:
     return True, [f"✅ 所有学习领域学时在合理范围（48-128学时）"]
 
 
+def validate_job_tasks_fields(data: Dict) -> Tuple[bool, List[str]]:
+    """验证job_tasks字段完整性"""
+    errors = []
+
+    job_tasks = data.get('job_tasks')
+    if job_tasks is None:
+        errors.append("缺少必需字段: job_tasks")
+        return False, errors
+
+    if not isinstance(job_tasks, list):
+        errors.append("job_tasks 应为列表类型")
+        return False, errors
+
+    if len(job_tasks) == 0:
+        errors.append("job_tasks 为空列表，应包含工作任务数据")
+        return False, errors
+
+    required_sub_fields = ['id', 'occupation_code', 'occupation_name', 'task_name']
+    missing_fields = []
+    for i, item in enumerate(job_tasks):
+        if not isinstance(item, dict):
+            errors.append(f"job_tasks[{i}] 应为字典类型")
+            continue
+        for field in required_sub_fields:
+            if field not in item:
+                missing_fields.append(f"job_tasks[{i}] 缺少字段: {field}")
+
+    if missing_fields:
+        errors.extend(missing_fields[:10])
+        if len(missing_fields) > 10:
+            errors.append(f"... 共 {len(missing_fields)} 个缺失字段")
+        return False, errors
+
+    return True, [f"✅ job_tasks字段完整（{len(job_tasks)}条任务）"]
+
+
+def validate_job_tasks_consistency(data: Dict) -> Tuple[bool, List[str]]:
+    errors = []
+
+    occupations = data.get('occupations', [])
+    job_tasks = data.get('job_tasks', [])
+
+    if not occupations:
+        return True, ["⚠️ 无occupations数据，跳过job_tasks数量检查"]
+
+    if not job_tasks:
+        return True, ["⚠️ 无job_tasks数据，跳过数量一致性检查"]
+
+    total_occupation_tasks = sum(len(occ.get('tasks', [])) for occ in occupations)
+    job_tasks_count = len(job_tasks)
+
+    if job_tasks_count != total_occupation_tasks:
+        errors.append(
+            f"job_tasks数量({job_tasks_count})与occupations.tasks总数({total_occupation_tasks})不一致"
+        )
+        return False, errors
+
+    return True, [f"✅ job_tasks数量与occupations.tasks一致（{job_tasks_count}条）"]
+
+
+def validate_table1_job_tasks(md_content: str, data: Dict) -> Tuple[bool, List[str]]:
+    errors = []
+
+    job_tasks = data.get('job_tasks', [])
+    if not job_tasks:
+        return True, ["⚠️ 无job_tasks数据，跳过表1对应关系检查"]
+
+    task_name_pattern = r'\*\*工作任务\*\*\s*\|\s*(.+?)\s*\|'
+    table1_task_names = re.findall(task_name_pattern, md_content)
+
+    job_task_names = {task.get('task_name', '') for task in job_tasks if task.get('task_name')}
+
+    if table1_task_names:
+        missing_in_job_tasks = [name for name in table1_task_names if name not in job_task_names]
+
+        if missing_in_job_tasks:
+            errors.append(f"表1中以下任务名称未在job_tasks中找到:")
+            for name in missing_in_job_tasks[:5]:
+                errors.append(f"  - {name}")
+            return False, errors
+
+    if table1_task_names and len(table1_task_names) != len(job_tasks):
+        errors.append(
+            f"表1任务数量({len(table1_task_names)})与job_tasks数量({len(job_tasks)})不匹配"
+        )
+        return False, errors
+
+    return True, [f"✅ 表1任务与job_tasks对应一致（{len(table1_task_names)}条）"]
+
+
+def validate_typical_tasks_references(data: Dict) -> Tuple[bool, List[str]]:
+    errors = []
+
+    job_tasks = data.get('job_tasks', [])
+    typical_tasks = data.get('typical_tasks', [])
+
+    if not typical_tasks:
+        return True, ["⚠️ 无typical_tasks数据，跳过引用验证"]
+
+    if not job_tasks:
+        errors.append("缺少job_tasks数据，无法验证typical_tasks引用关系")
+        return False, errors
+
+    job_task_ids = {task.get('id', '') for task in job_tasks if task.get('id')}
+
+    invalid_references = []
+    for tt in typical_tasks:
+        tt_id = tt.get('id', '未知ID')
+        for ref_id in tt.get('related_tasks', []):
+            if ref_id not in job_task_ids:
+                invalid_references.append(f"{tt_id} 引用了不存在的job_tasks ID: {ref_id}")
+
+    if invalid_references:
+        errors.append("typical_tasks存在无效的related_tasks引用:")
+        for ref in invalid_references[:10]:
+            errors.append(f"  - {ref}")
+        return False, errors
+
+    return True, [f"✅ typical_tasks的related_tasks引用全部有效"]
+
+
+def validate_data_source_separation(md_content: str, data: Dict) -> Tuple[bool, List[str]]:
+    errors = []
+
+    job_tasks = data.get('job_tasks', [])
+    typical_tasks = data.get('typical_tasks', [])
+
+    has_table1 = bool(re.search(r'### 表1', md_content))
+    has_table2 = bool(re.search(r'### 表2', md_content))
+    has_table3 = bool(re.search(r'### 表3', md_content))
+
+    if has_table1 and not job_tasks:
+        errors.append("表1存在但缺少job_tasks数据源")
+
+    if has_table2 and not typical_tasks:
+        errors.append("表2存在但缺少typical_tasks数据源")
+
+    if has_table3 and not typical_tasks:
+        errors.append("表3存在但缺少typical_tasks数据源")
+
+    if job_tasks and typical_tasks:
+        job_task_names = {t.get('task_name', '') for t in job_tasks if t.get('task_name')}
+        typical_task_names = {t.get('name', '') for t in typical_tasks if t.get('name')}
+
+        table1_task_pattern = r'\*\*工作任务\*\*\s*\|\s*(.+?)\s*\|'
+        table1_names = set(re.findall(table1_task_pattern, md_content))
+
+        overlap = table1_names & typical_task_names
+        if overlap and table1_names & job_task_names:
+            errors.append(f"表1中混用了job_tasks和typical_tasks的任务名称: {overlap}")
+
+    if errors:
+        return False, errors
+
+    return True, ["✅ 数据源分离正确（表1=job_tasks，表2-3=typical_tasks）"]
+
+
 def validate_learning_situations_count(data: Dict) -> Tuple[bool, List[str]]:
     """验证学习情境数量（SKILL.md要求：每领域3-6个）"""
     errors = []
@@ -335,11 +493,11 @@ def validate_learning_situations_count(data: Dict) -> Tuple[bool, List[str]]:
 
 
 def validate_required_fields(data: Dict) -> Tuple[bool, List[str]]:
-    """验证必需字段完整性"""
     errors = []
     
     required_fields = {
         'major_info': ['major_code', 'major_name', 'education_level'],
+        'job_tasks': ['id', 'occupation_code', 'occupation_name', 'task_name'],
         'typical_tasks': ['id', 'name'],
         'action_domains': ['id', 'name', 'tasks'],
         'learning_domains': ['id', 'name']
@@ -401,6 +559,11 @@ def main():
     # 执行验证
     validations = [
         ("必需字段完整性", validate_required_fields(data)),
+        ("job_tasks字段完整性", validate_job_tasks_fields(data)),
+        ("job_tasks数量一致性", validate_job_tasks_consistency(data)),
+        ("表1-job_tasks对应关系", validate_table1_job_tasks(md_content, data)),
+        ("typical_tasks引用有效性", validate_typical_tasks_references(data)),
+        ("数据源分离正确性", validate_data_source_separation(md_content, data)),
         ("表格编号连续性", validate_table_numbers(md_content)),
         ("表格空白单元格", validate_blank_cells(md_content)),
         ("典型任务覆盖性", validate_task_coverage(data)),

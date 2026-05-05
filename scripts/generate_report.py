@@ -114,7 +114,17 @@ def validate_data_structure(data: Dict) -> None:
             if field not in data['major_info']:
                 warnings.append(f"major_info 缺少 {field} 字段")
     
-    # 检查 typical_tasks
+    # 检查 job_tasks（表1数据源）
+    if 'job_tasks' not in data:
+        warnings.append("缺少 job_tasks 字段，表1将回退使用typical_tasks生成")
+    else:
+        for i, task in enumerate(data['job_tasks']):
+            if 'task_name' not in task:
+                warnings.append(f"job_tasks[{i}] 缺少 task_name 字段")
+            if 'occupation_name' not in task and 'occupation_code' not in task:
+                warnings.append(f"job_tasks[{i}] 缺少 occupation_name 和 occupation_code 字段")
+    
+    # 检查 typical_tasks（表2-3数据源）
     if 'typical_tasks' not in data:
         warnings.append("缺少 typical_tasks 字段，表2-3将为空")
     else:
@@ -461,97 +471,185 @@ def generate_report(data: Dict) -> str:
     sections.append("---\n")
     
     # ==================== 一、工作任务分析 ====================
-    # 修改：每个工作任务单独一个表格，内容完整
-    # 修复：一个职业可能对应多个工种，需要展开为独立岗位
+    # 数据源：job_tasks（每个职业的所有工作任务）
+    # 回退：若job_tasks不存在，使用原有typical_tasks逻辑
     sections.append("## 一、工作任务分析\n")
     
     occupations = data.get('occupations', [])
     task_counter = 1
     
-    # 构建岗位-任务映射：从典型任务中提取岗位信息
-    typical_tasks = data.get('typical_tasks', [])
-    job_task_mapping = {}  # {岗位名: [任务名列表]}
-    for task in typical_tasks:
-        # 兼容多种字段名：related_job、position、岗位
-        job = task.get('related_job', task.get('position', task.get('岗位', '')))
-        task_name = task.get('name', task.get('task_name', ''))
-        if job and task_name:
-            if job not in job_task_mapping:
-                job_task_mapping[job] = []
-            job_task_mapping[job].append(task_name)
+    job_tasks = data.get('job_tasks', [])
     
-    # 如果没有从典型任务中提取到岗位，则使用occupations数据
-    if not job_task_mapping and occupations:
-        for occ in occupations:
-            occ_name = occ.get('职业名称', occ.get('name', '岗位'))
-            tasks = occ.get('主要工作任务', occ.get('tasks', []))
-            job_task_mapping[occ_name] = [t if isinstance(t, str) else t.get('name', '') for t in tasks]
-    
-    # 获取工作任务详细信息
-    task_details = data.get('work_task_details', {})
-    
-    task_name_to_detail = {}
-    for task in typical_tasks:
-        task_name = task.get('name', task.get('task_name', ''))
-        if task_name:
-            task_name_to_detail[task_name] = task
-    
-    for job_name, task_list in job_task_mapping.items():
-        for task_name in task_list:
-            if not task_name:
-                continue
+    if job_tasks:
+        # 按occupation_name分组
+        job_task_mapping = {}
+        for task in job_tasks:
+            job_name = task.get('occupation_name', '')
+            if not job_name:
+                occ_code = task.get('occupation_code', '')
+                for occ in occupations:
+                    if occ.get('code') == occ_code:
+                        job_name = occ.get('name', '未知岗位')
+                        break
+            if not job_name:
+                job_name = '未知岗位'
+            
+            task_name = task.get('task_name', '')
+            if job_name and task_name:
+                if job_name not in job_task_mapping:
+                    job_task_mapping[job_name] = []
+                job_task_mapping[job_name].append(task)
+        
+        # 构建任务详情索引（供表1使用）
+        task_details = data.get('work_task_details', {})
+        
+        for job_name, tasks in job_task_mapping.items():
+            for job_task in tasks:
+                task_name = job_task.get('task_name', '')
+                if not task_name:
+                    continue
                 
-            sections.append(f"### 表1-{task_counter} {task_name}工作任务分析\n")
-            sections.append(f"**所属岗位**：{job_name}\n")
-            
-            task_detail = task_name_to_detail.get(task_name, {})
-            detail = task_details.get(task_name, {})
-            
-            work_object = task_detail.get('work_object', '')
-            tools_materials = task_detail.get('tools_materials', '')
-            work_method = task_detail.get('work_method', '')
-            labor_organization = task_detail.get('labor_organization', '')
-            work_requirements = task_detail.get('work_requirements', '')
-            
-            edu_level = metadata.get('education_level', major_info.get('education_level', ''))
-            ability_desc = detail.get('ability', task_detail.get('work_requirements', f"能独立完成{task_name}相关任务，具备相应的专业技能和操作能力"))
-            if '中职' in edu_level:
-                ability_desc = ability_desc.replace('分析', '识别').replace('诊断', '检测')
-            
-            content_parts = []
-            if work_object:
-                content_parts.append(f"对{work_object}进行处理")
-            if work_method:
-                content_parts.append(f"采用{work_method}方法")
-            content_desc = "，".join(content_parts) if content_parts else f"根据工作要求，完成{task_name}相关工作任务"
-            
-            condition_parts = []
-            if tools_materials:
-                condition_parts.append(f"使用{tools_materials}")
-            condition_desc = "，".join(condition_parts) if condition_parts else f"{job_name}工作场所，配备必要的专业设备和工具"
-            
-            result_desc = f"完成{task_name}任务，{work_requirements}" if work_requirements else f"完成{task_name}任务并达到质量标准"
-            
-            default_certificate = f"{job_name}相关职业资格证书"
-            
-            task_lower = task_name.lower()
-            if any(kw in task_lower for kw in ['维修', '检修', '维护', '故障', '检测', '诊断']):
-                default_certificate = "维修工职业资格证书"
-            elif any(kw in task_lower for kw in ['护理', '照护', '康复', '医疗', '保健']):
-                default_certificate = "护理员或康复师职业资格证书"
-            
-            table_data = {
-                "工作任务": task_name,
-                "工作内容": content_desc,
-                "职业能力": ability_desc,
-                "工作条件": condition_desc,
-                "工作经验要求": detail.get('experience', f"掌握{work_method}方法，具备{tools_materials}使用技能" if work_method and tools_materials else "经过专业培训，掌握基本操作技能"),
-                "工作成果": result_desc,
-                "职业类证书": detail.get('certificate', default_certificate)
-            }
-            sections.append(generate_vertical_table(table_data))
-            sections.append("\n")
-            task_counter += 1
+                sections.append(f"### 表1-{task_counter} {task_name}工作任务分析\n")
+                sections.append(f"**所属岗位**：{job_name}\n")
+                
+                work_object = job_task.get('work_object', '')
+                tools_materials = job_task.get('tools_materials', '')
+                work_method = job_task.get('work_method', '')
+                labor_organization = job_task.get('labor_organization', '')
+                work_result = job_task.get('work_result', '')
+                difficulty_level = job_task.get('difficulty_level', '')
+                
+                detail = task_details.get(task_name, {})
+                
+                edu_level = metadata.get('education_level', major_info.get('education_level', ''))
+                ability_desc = detail.get('ability', job_task.get('work_requirements', f"能独立完成{task_name}相关任务，具备相应的专业技能和操作能力"))
+                if '中职' in edu_level:
+                    ability_desc = ability_desc.replace('分析', '识别').replace('诊断', '检测')
+                
+                content_parts = []
+                if work_object:
+                    content_parts.append(f"对{work_object}进行处理")
+                if work_method:
+                    content_parts.append(f"采用{work_method}方法")
+                content_desc = "，".join(content_parts) if content_parts else f"根据工作要求，完成{task_name}相关工作任务"
+                
+                condition_parts = []
+                if tools_materials:
+                    condition_parts.append(f"使用{tools_materials}")
+                if labor_organization:
+                    condition_parts.append(f"劳动组织：{labor_organization}")
+                condition_desc = "，".join(condition_parts) if condition_parts else f"{job_name}工作场所，配备必要的专业设备和工具"
+                
+                result_desc = work_result if work_result else f"完成{task_name}任务并达到质量标准"
+                
+                task_lower = task_name.lower()
+                if any(kw in task_lower for kw in ['维修', '检修', '维护', '故障', '检测', '诊断']):
+                    default_certificate = "维修工职业资格证书"
+                elif any(kw in task_lower for kw in ['护理', '照护', '康复', '医疗', '保健']):
+                    default_certificate = "护理员或康复师职业资格证书"
+                else:
+                    default_certificate = f"{job_name}相关职业资格证书"
+                
+                table_data = {
+                    "工作任务": task_name,
+                    "工作内容": content_desc,
+                    "职业能力": ability_desc,
+                    "工作条件": condition_desc,
+                    "工作经验要求": detail.get('experience', f"具备{difficulty_level}难度任务的执行能力，掌握相关工作方法" if difficulty_level else "经过专业培训，掌握基本操作技能"),
+                    "工作成果": result_desc,
+                    "职业类证书": detail.get('certificate', default_certificate)
+                }
+                sections.append(generate_vertical_table(table_data))
+                sections.append("\n")
+                task_counter += 1
+    else:
+        # 回退：使用原有typical_tasks逻辑
+        print("[WARNING] 数据中缺少job_tasks字段，表1将回退使用typical_tasks生成（建议补充job_tasks数据）")
+        warnings_list.append("[WARNING] 缺少job_tasks字段，表1使用typical_tasks回退生成")
+        
+        # 构建岗位-任务映射：从典型任务中提取岗位信息
+        typical_tasks = data.get('typical_tasks', [])
+        job_task_mapping = {}
+        for task in typical_tasks:
+            job = task.get('related_job', task.get('position', task.get('岗位', '')))
+            task_name = task.get('name', task.get('task_name', ''))
+            if job and task_name:
+                if job not in job_task_mapping:
+                    job_task_mapping[job] = []
+                job_task_mapping[job].append(task_name)
+        
+        # 如果没有从典型任务中提取到岗位，则使用occupations数据
+        if not job_task_mapping and occupations:
+            for occ in occupations:
+                occ_name = occ.get('职业名称', occ.get('name', '岗位'))
+                tasks = occ.get('主要工作任务', occ.get('tasks', []))
+                job_task_mapping[occ_name] = [t if isinstance(t, str) else t.get('name', '') for t in tasks]
+        
+        # 获取工作任务详细信息
+        task_details = data.get('work_task_details', {})
+        
+        task_name_to_detail = {}
+        for task in typical_tasks:
+            task_name = task.get('name', task.get('task_name', ''))
+            if task_name:
+                task_name_to_detail[task_name] = task
+        
+        for job_name, task_list in job_task_mapping.items():
+            for task_name in task_list:
+                if not task_name:
+                    continue
+                    
+                sections.append(f"### 表1-{task_counter} {task_name}工作任务分析\n")
+                sections.append(f"**所属岗位**：{job_name}\n")
+                
+                task_detail = task_name_to_detail.get(task_name, {})
+                detail = task_details.get(task_name, {})
+                
+                work_object = task_detail.get('work_object', '')
+                tools_materials = task_detail.get('tools_materials', '')
+                work_method = task_detail.get('work_method', '')
+                labor_organization = task_detail.get('labor_organization', '')
+                work_requirements = task_detail.get('work_requirements', '')
+                
+                edu_level = metadata.get('education_level', major_info.get('education_level', ''))
+                ability_desc = detail.get('ability', task_detail.get('work_requirements', f"能独立完成{task_name}相关任务，具备相应的专业技能和操作能力"))
+                if '中职' in edu_level:
+                    ability_desc = ability_desc.replace('分析', '识别').replace('诊断', '检测')
+                
+                content_parts = []
+                if work_object:
+                    content_parts.append(f"对{work_object}进行处理")
+                if work_method:
+                    content_parts.append(f"采用{work_method}方法")
+                content_desc = "，".join(content_parts) if content_parts else f"根据工作要求，完成{task_name}相关工作任务"
+                
+                condition_parts = []
+                if tools_materials:
+                    condition_parts.append(f"使用{tools_materials}")
+                condition_desc = "，".join(condition_parts) if condition_parts else f"{job_name}工作场所，配备必要的专业设备和工具"
+                
+                result_desc = f"完成{task_name}任务，{work_requirements}" if work_requirements else f"完成{task_name}任务并达到质量标准"
+                
+                default_certificate = f"{job_name}相关职业资格证书"
+                
+                task_lower = task_name.lower()
+                if any(kw in task_lower for kw in ['维修', '检修', '维护', '故障', '检测', '诊断']):
+                    default_certificate = "维修工职业资格证书"
+                elif any(kw in task_lower for kw in ['护理', '照护', '康复', '医疗', '保健']):
+                    default_certificate = "护理员或康复师职业资格证书"
+                
+                table_data = {
+                    "工作任务": task_name,
+                    "工作内容": content_desc,
+                    "职业能力": ability_desc,
+                    "工作条件": condition_desc,
+                    "工作经验要求": detail.get('experience', f"掌握{work_method}方法，具备{tools_materials}使用技能" if work_method and tools_materials else "经过专业培训，掌握基本操作技能"),
+                    "工作成果": result_desc,
+                    "职业类证书": detail.get('certificate', default_certificate)
+                }
+                sections.append(generate_vertical_table(table_data))
+                sections.append("\n")
+                task_counter += 1
     
     # ==================== 二、确定典型工作任务 ====================
     sections.append("## 二、确定典型工作任务\n")
