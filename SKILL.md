@@ -221,13 +221,17 @@ dependency:
 │         - 生成分岗位的工作任务列表                                                │
 │                                                                                   │
 │  步骤8: 工作任务分析                                                              │
-│         - 为每个工作任务生成：工作对象、工具/材料、工作方法、劳动组织、工作成果等 │
+│         - 为每个职业的每个工作任务生成完整分析                                    │
+│         - 生成：工作对象、工具/材料、工作方法、劳动组织、工作成果等              │
+│         - 输出：job_tasks[]（表1数据源）                                          │
 │         - 根据教育层次适配能力描述深度                                            │
 │                                                                                   │
 │  步骤9: 典型工作任务确定                                                          │
+│         - 从job_tasks中筛选提炼典型工作任务                                        │
 │         - 归类相似工作任务                                                        │
-│         - 确定任务难度等级                                                        │
-│         - 生成典型工作任务汇总表                                                  │
+│         - 确定任务难度等级（简单/中等/复杂）                                      │
+│         - 输出：typical_tasks[]（表2+表3数据源）                                  │
+│         - related_tasks字段引用job_tasks中的任务ID                               │
 │                                                                                   │
 │  步骤10: 行动领域划分                                                             │
 │         - 按工作对象相似性、任务难度梯度、工作逻辑顺序等原则聚类                  │
@@ -599,18 +603,59 @@ python scripts/integrate_data.py \
 
 **任务**：从职业面向字段提取职业名称、岗位名称、工作任务列表
 
+**输出**： occupations[].tasks（每个职业的所有工作任务列表）
+
 ### 步骤8：工作任务分析
+
+**任务**：为每个职业的每个工作任务生成完整的五个维度分析
+
+**输出数据结构**：`job_tasks[]`（表1数据源）
+
+**字段要求**：
+| 字段 | 说明 | 表格对应 |
+|------|------|----------|
+| id | 任务唯一标识（T001格式） | 表1序号 |
+| occupation_code | 职业代码（追溯来源） | 表1显示 |
+| occupation_name | 职业名称 | 表1显示 |
+| task_name | 任务名称 | 表1"工作任务" |
+| work_object | 工作对象 | 表1"工作内容"组合 |
+| tools_materials | 工具材料 | 表1"工作条件" |
+| work_method | 工作方法 | 表1"工作内容"组合 |
+| labor_organization | 劳动组织形式 | 表1"工作经验要求"推断 |
+| work_result | 工作成果 | 表1"工作成果" |
+| difficulty_level | 难度等级 | 表1"职业能力"推断 |
 
 **教育层次适配**：
 | 层次 | 能力动词 | 禁止动词 |
 |------|----------|----------|
-| 中职 | 操作、执行、完成、使用、识别、检测 | 设计、优化、创新、管理、分析 |
+| 中职 | 操作、执行、完成、使用、识别、检测、制作、编制 | 设计、优化、创新、管理、分析 |
 | 高职 | 检测、诊断、分析、维护、维修、优化 | 研发、创新、管理 |
 | 职教本科 | 设计、优化、管理、创新 | - |
 
 ### 步骤9：典型工作任务确定
 
-**任务**：归类相似任务、确定难度等级（简单/中等/复杂）、生成汇总表
+**任务**：从job_tasks中筛选提炼典型工作任务
+
+**输出数据结构**：`typical_tasks[]`（表2+表3数据源）
+
+**筛选原则**：
+- 职业大典中的主要工作任务
+- 具有代表性、覆盖性
+- 符合专业培养目标
+
+**字段要求**：
+| 字段 | 说明 | 表格对应 |
+|------|------|----------|
+| id | 典型任务唯一标识（TT001格式） | 表2序号 + 表3标题 |
+| name | 典型任务名称 | 表2"典型工作任务" + 表3标题 |
+| related_job | 关联岗位 | 表2"对应岗位" |
+| related_tasks | 引用job_tasks任务ID | 内部关联（无需显示） |
+| work_object | 工作对象 | 表2"工作对象" + 表3"工作对象" |
+| difficulty_level | 难度等级 | 表2"工作难度" |
+| work_method | 工作方法 | 表3"工作方法"（显示为"工作过程"） |
+| tools_materials | 工具材料 | 表3"工具/材料" |
+| labor_organization | 劳动组织形式 | 表3"劳动组织" |
+| work_requirements | 工作要求 | 表3"工作要求" |
 
 ### 步骤10：行动领域划分
 
@@ -643,7 +688,17 @@ python scripts/integrate_data.py \
 
 > **MANDATORY - READ**: [`references/analysis_data_template.json`](references/analysis_data_template.json) 完整格式规范
 
-**必需字段**：major_info、occupations、jobs、typical_tasks、action_domains、abilities、learning_domains、learning_situations、metadata
+**必需字段**：major_info、occupations、jobs、job_tasks、typical_tasks、action_domains、abilities、learning_domains、learning_situations、metadata
+
+**数据结构对应关系**：
+| 数据结构 | 对应表格 | 说明 |
+|----------|----------|------|
+| job_tasks[] | 表1 | 每个职业的所有工作任务分析 |
+| typical_tasks[] | 表2+表3 | 典型工作任务汇总+详细分析 |
+| action_domains[] | 表4-6 | 行动领域划分+描述+能力汇总 |
+| abilities{} | 表7-8 | 职业能力一览+解构 |
+| learning_domains[] | 表9-10 | 学习领域汇总+描述 |
+| learning_situations[] | 表11 | 学习情境设计 |
 
 **子字段约束**：action_domains[i]必须包含tasks和abilities；learning_domains[i]必须包含methods和assessment
 
@@ -676,6 +731,8 @@ Agent读取生成的报告，检查以下项：
 
 | 检查项 | 严重程度 | 验证方法 |
 |--------|----------|----------|
+| job_tasks包含每个职业的所有任务 | 高 | 无遗漏 |
+| typical_tasks引用job_tasks任务ID正确 | 高 | related_tasks字段ID匹配 |
 | 表1岗位与表2对应岗位一致 | 高 | 不得统称为单一岗位 |
 | 表4覆盖表2所有典型任务 | 高 | 无遗漏任务 |
 | 表7与表8能力编号一致 | 高 | 一一对应 |
@@ -709,13 +766,13 @@ Agent执行本Skill时，按以下清单逐项确认：
 
 ### 阶段二检查（大模型自身）
 - [ ] 步骤7：职业面向已解析
-- [ ] 步骤8：每个工作任务已生成完整分析
-- [ ] 步骤9：典型工作任务已确定
+- [ ] 步骤8：每个职业的每个工作任务已生成完整分析（job_tasks已生成）
+- [ ] 步骤9：典型工作任务已确定（typical_tasks已生成，related_tasks引用正确）
 - [ ] 步骤10：行动领域已划分，能力等级已设定
 - [ ] 步骤11：能力分析完成，表7/表8一致
 - [ ] 步骤12：学习领域已转换
 - [ ] 步骤13：学习情境已设计
-- [ ] 步骤14：`analysis_data.json` 已生成
+- [ ] 步骤14：`analysis_data.json` 已生成，包含job_tasks和typical_tasks
 
 ### 阶段三检查（Python脚本）
 - [ ] 步骤15：`report.md` 已生成
