@@ -333,7 +333,7 @@ python -c "from pathlib import Path; files=['assets/moe_pdfs_final.json', 'asset
 
 > **关键判断**：根据职业代码首位数字加载对应大类文件（完整代码→大类映射表见 [`workflow_details.md`](references/workflow_details.md) 步骤2）
 >
-> **使用方法**：`OccupationDictionaryLoader.load_by_occupation_code('6-22-02')`
+> **使用方法**：`get_occupation_dictionary('6-22-02')`（模块级便捷函数，内部会实例化 `OccupationDictionaryLoader`）
 
 ### ESCO/O*NET查询
 
