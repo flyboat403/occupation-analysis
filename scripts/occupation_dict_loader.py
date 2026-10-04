@@ -34,10 +34,6 @@ class OccupationDictionaryLoader:
         '6-': ('6', 'class_6_生产制造及有关人员.md'),
     }
 
-    # 第7大类（2024/2025新增职业）：新增职业代码仍带原大类前缀（如 4-04-05-12），
-    # 仅按首位加载会漏掉，需在加载主大类后按代码检索补充
-    CLASS7_FILENAME = 'class_7_2025年新增职业.md'
-    
     def __init__(self, base_path: str = 'assets/occupation_dictionary_split'):
         """
         初始化加载器
@@ -124,62 +120,9 @@ class OccupationDictionaryLoader:
             print(f"[ERROR] 读取文件失败: {e}")
             return None
 
-    def _load_class7_supplement(self, occupation_code: str, use_cache: bool = True) -> str:
-        """
-        在第7大类（新增职业）文件中按职业代码检索，返回命中的段落
-
-        纯字符串匹配 + 标题切分，不做语义推断；未命中返回空字符串（零额外开销）
-
-        Args:
-            occupation_code: 职业代码，如 "4-04-05-12"
-            use_cache: 是否使用缓存
-
-        Returns:
-            命中的段落文本（含标题），未命中返回 ''
-        """
-        if not occupation_code:
-            return ''
-
-        # 读取并缓存第7大类文件
-        cache_key = '__class7__'
-        if use_cache and cache_key in self._cache:
-            content = self._cache[cache_key]
-        else:
-            filepath = self.base_path / self.CLASS7_FILENAME
-            if not filepath.exists():
-                return ''
-            try:
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    content = f.read()
-            except Exception as e:
-                print(f"[ERROR] 读取第7大类文件失败: {e}")
-                return ''
-            if use_cache:
-                self._cache[cache_key] = content
-
-        # 未命中直接返回（不产生任何输出开销）
-        if occupation_code not in content:
-            return ''
-
-        # 按1-4级标题切分，提取包含该代码的完整段落（标题+正文到下一个标题为止）
-        parts = re.split(r'^(#{1,4} .+)$', content, flags=re.M)
-        blocks = []
-        for i in range(1, len(parts) - 1, 2):
-            header, body = parts[i], parts[i + 1]
-            if occupation_code in header or occupation_code in body:
-                block = re.sub(r'\n+---\s*$', '', (header + body).strip())
-                if block not in blocks:
-                    blocks.append(block)
-
-        if blocks:
-            print(f"[INFO] 第7大类（新增职业）命中 {occupation_code}，附加 {len(blocks)} 个段落 (~{sum(len(b) for b in blocks)//4} tokens)")
-        return '\n\n'.join(blocks)
-
     def load_by_occupation_code(self, occupation_code: str) -> Optional[str]:
         """
         根据职业代码智能加载对应大类文件
-
-        新增职业（2024/2025年发布）会自动附加第7大类中的命中段落
 
         Args:
             occupation_code: 职业代码，如 "6-22-02"
@@ -193,20 +136,9 @@ class OccupationDictionaryLoader:
             return None
 
         content = self.load_class_content(class_num)
-        if not content:
-            return None
-
-        print(f"[OK] 已加载第{class_num}大类，用于查询职业 {occupation_code}")
-        print(f"[INFO] 内容大小: {len(content)} 字符 (~{len(content)/4:.0f} tokens)")
-
-        supplement = self._load_class7_supplement(occupation_code)
-        if supplement:
-            content = (
-                content
-                + '\n\n---\n\n'
-                + f'> 📌 以下内容来自《职业分类大典》第7大类（2024/2025年新增职业补充），匹配代码 {occupation_code}：\n\n'
-                + supplement
-            )
+        if content:
+            print(f"[OK] 已加载第{class_num}大类，用于查询职业 {occupation_code}")
+            print(f"[INFO] 内容大小: {len(content)} 字符 (~{len(content)/4:.0f} tokens)")
 
         return content
     
@@ -233,18 +165,8 @@ class OccupationDictionaryLoader:
                 loaded_classes[class_num] = self.load_class_content(class_num)
             
             content = loaded_classes[class_num]
-            if not content:
-                continue
-            
-            supplement = self._load_class7_supplement(code)
-            if supplement:
-                content = (
-                    content
-                    + '\n\n---\n\n'
-                    + f'> 📌 以下内容来自《职业分类大典》第7大类（2024/2025年新增职业补充），匹配代码 {code}：\n\n'
-                    + supplement
-                )
-            results[code] = content
+            if content:
+                results[code] = content
         
         return results
     

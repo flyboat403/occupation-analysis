@@ -83,9 +83,6 @@ loader = OccupationDictionaryLoader()
 # 例如：职业代码 6-05-01-01 → 加载 class_6_生产制造及有关人员.md
 occupation_data = loader.load_by_occupation_code('6-05-01-01')
 
-# 2024/2025年新增职业（如 4-04-05-12 生成式人工智能系统应用员）会自动
-# 附加第7大类（class_7_2025年新增职业.md）中的命中段落，无需额外处理
-
 # 输出包含：
 # - code: 职业代码
 # - name: 职业名称
@@ -103,7 +100,6 @@ occupation_data = loader.load_by_occupation_code('6-05-01-01')
 | 4 | `class_4_社会生产服务...md` | 服务人员 |
 | 5 | `class_5_农林牧渔...md` | 农业生产人员 |
 | 6 | `class_6_生产制造...md` | 制造业人员（服装制版师、缝纫工等） |
-| 7 | `class_7_2025年新增职业.md` | 新职业 |
 
 ### 输出格式
 
