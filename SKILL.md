@@ -326,7 +326,7 @@ python -c "from pathlib import Path; files=['assets/moe_pdfs_final.json', 'asset
 | 专业教学标准 | `assets/moe_pdfs_final.json` | 教育部发布的专业教学标准索引 |
 | 专业-职业对照表 | `assets/专业-职业对照表.xlsx` | 专业对应职业和岗位的对照表 |
 | 职业大典 | `assets/occupation_dictionary_split/` | 中国职业分类大典（2022版，按大类拆分） |
-| ESCO文档 | `assets/esco_detail_md/` | ESCO职业详细文档（约3000+个MD文件） |
+| ESCO文档 | `assets/esco_details_md/` | ESCO职业详细文档（约3000+个MD文件） |
 | O*NET文档 | `assets/onet_details_md/` | O*NET职业详细文档（894个MD文件） |
 
 ### 职业大典分段加载
@@ -481,7 +481,7 @@ python scripts/integrate_data.py \
 
 > **MANDATORY - READ**: [`references/work_process_method.md`](references/work_process_method.md) **第六节**（情境设计：数量计算、命名规则、学时分配）+ 第2.3节（模板）
 
-**任务**：为每个学习领域设计3-8个情境，分配学时（16-32学时/情境）
+**任务**：为每个学习领域设计3-6个情境，分配学时（16-32学时/情境）
 
 ### 步骤13：输出结构化分析数据
 
@@ -609,7 +609,7 @@ pip install requests python-dotenv pypandoc pypdf pdfplumber
 确保以下目录和文件存在：
 - `assets/moe_pdfs_final.json` - 专业教学标准
 - `assets/occupation_dictionary_split/` - 职业大典（按大类拆分）
-- `assets/esco_detail_md/` - ESCO职业文档
+- `assets/esco_details_md/` - ESCO职业文档
 - `assets/onet_details_md/` - O*NET职业文档
 
 ## 注意事项
