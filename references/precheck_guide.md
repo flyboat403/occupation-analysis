@@ -48,7 +48,7 @@ def check_environment():
     # 必需文件
     required_files = [
         "assets/moe_pdfs_final.json",
-        "assets/moe_pdfs_new.json",
+        "assets/moe_pdfs_md",
     ]
     for f in required_files:
         path = Path(f)
@@ -110,11 +110,10 @@ python scripts/occupation_dict_loader.py
 
 | 优先级 | 数据源 | 用途 | 备注 |
 |--------|--------|------|------|
-| 1 | `assets/moe_pdfs_final.json` | 专业教学标准 | 主数据源 |
-| 2 | `assets/moe_pdfs_new.json` | 专业简介 | 备选数据源 |
-| 1 | IMA知识库 | ESCO/O*NET数据 | 需配置凭证 |
-| 2 | 官方API | ESCO/O*NET数据 | 网络访问 |
-| 3 | Web搜索 | 补充数据 | 最后备选 |
+| 1 | `assets/moe_pdfs_final.json` | 专业教学标准 | 主数据源（PDF链接指向GitHub镜像） |
+| 2 | `assets/moe_pdfs_md/` | 专业简介（类级MD） | 备用数据源 |
+| 3 | `assets/esco_details_md/` | ESCO职业文档 | 本地文档 |
+| 4 | `assets/onet_details_md/` | O*NET职业文档 | 本地文档 |
 
 ---
 

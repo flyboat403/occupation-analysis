@@ -323,7 +323,7 @@ python -c "from pathlib import Path; files=['assets/moe_pdfs_final.json', 'asset
 
 | 文件 | 路径 | 说明 |
 |------|------|------|
-| 专业教学标准 | `assets/moe_pdfs_final.json` | 教育部发布的专业教学标准索引 |
+| 专业教学标准 | `assets/moe_pdfs_final.json` | 教育部专业教学标准索引（579条，PDF链接指向GitHub镜像） |
 | 专业-职业对照表 | `assets/专业-职业对照表.xlsx` | 专业对应职业和岗位的对照表 |
 | 职业大典 | `assets/occupation_dictionary_split/` | 中国职业分类大典（2022版，按大类拆分） |
 | ESCO文档 | `assets/esco_details_md/` | ESCO职业详细文档（约3000+个MD文件） |

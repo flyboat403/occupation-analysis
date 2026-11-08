@@ -96,8 +96,8 @@ occupation-analysis/
 │   └── precheck_guide.md      # 预检指南
 │
 ├── assets/                     # 数据文件
-│   ├── moe_pdfs_final.json    # 专业教学标准索引（172KB）
-│   ├── moe_pdfs_md/           # 专业教学标准 MD 文件
+│   ├── moe_pdfs_final.json    # 专业教学标准索引（579条，约229KB，GitHub镜像链接）
+│   ├── moe_pdfs_md/           # 专业简介 MD 文件（检索备用数据源）
 │   ├── 专业-职业对照表.xlsx    # 专业对应职业对照表（1169条）
 │   ├── occupation_dictionary_split/  # 中国职业大典（按7大类拆分）
 │   ├── esco_details_md/       # ESCO 职业文档（~3,000个）
@@ -118,11 +118,13 @@ occupation-analysis/
 
 | 数据源 | 文件位置 | 说明 |
 |--------|----------|------|
-| **专业教学标准** | `assets/moe_pdfs_final.json` | 教育部发布的官方标准（172KB） |
+| **专业教学标准** | `assets/moe_pdfs_final.json` | 教育部专业教学标准索引（579条，PDF链接指向GitHub镜像，约229KB） |
 | **专业-职业对照表** | `assets/专业-职业对照表.xlsx` | 专业对应职业编码和名称（1169条） |
 | **中国职业大典** | `assets/occupation_dictionary_split/` | 2022版，按7个大类拆分 |
 | **ESCO** | `assets/esco_details_md/` | 欧洲技能/能力/资格框架（~3,000个文件） |
 | **O*NET** | `assets/onet_details_md/` | 美国职业信息网络（894个文件） |
+
+> 注：moe.gov.cn 原始链接已失效，索引中的 `pdf_url` 统一指向 GitHub 镜像仓库（flyboat403/vocational-education-standard-system），下载解析逻辑不变。
 
 ## 📝 报告结构（七部分）
 

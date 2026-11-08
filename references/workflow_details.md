@@ -28,9 +28,11 @@
 
 | 优先级 | 数据源 | 内容 | 状态 |
 |--------|--------|------|------|
-| 1 | `moe_pdfs_final.json` | 专业代码、名称、PDF URL | 可用 |
+| 1 | `moe_pdfs_final.json` | 专业代码、名称、PDF URL（GitHub镜像） | 可用 |
 | 2 | PDF文档解析 | 完整专业教学标准内容 | 可用（需安装pdfplumber或pypdf）|
-| 3 | `moe_pdfs_md/*.md` | 已解析的MD文档 | 可用（备用）|
+| 3 | `moe_pdfs_md/*.md` | 专业简介MD（类级） | 可用（备用）|
+
+> 注：moe.gov.cn 原始链接已失效，`pdf_url` 已统一指向 GitHub 镜像仓库（flyboat403/vocational-education-standard-system），下载解析逻辑不变。
 
 ### 执行命令
 
@@ -49,7 +51,7 @@ python scripts/search_major.py --major "专业名称" --level "教育层次" --n
 | `major_code` | 专业代码 | 必需 |
 | `major_name` | 专业名称 | 必需 |
 | `education_level` | 教育层次 | 必需 |
-| `pdf_url` | PDF文档链接 | moe_pdfs_final.json |
+| `pdf_url` | PDF文档链接（GitHub镜像） | moe_pdfs_final.json |
 | `pdf_parsed` | PDF是否已解析 | 布尔值 |
 | `career_orientation` | 职业面向 | PDF解析或MD文件 |
 | `training_goal` | 培养目标 | PDF解析或MD文件 |
