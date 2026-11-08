@@ -325,7 +325,9 @@ python scripts/validate_report.py --report temp/report.md --data temp/analysis_d
 
 ## 📄 许可证
 
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
+本项目代码、脚本、文档及维护者原创的整理/转换成果采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。
+
+第三方数据（职业大典、教育部材料、ESCO/O*NET）不适用 MIT，其来源与许可范围见 [NOTICE.md](NOTICE.md)。
 
 ## 📮 联系方式
 
