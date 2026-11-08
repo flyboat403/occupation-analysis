@@ -50,10 +50,18 @@ def check_environment():
         "assets/moe_pdfs_final.json",
         "assets/moe_jianjie_final_github.json",
         "assets/moe_pdfs_md",
+        "assets/esco_final.json",
+        "assets/onet_final.json",
     ]
     for f in required_files:
         path = Path(f)
         checks.append((f, path.exists(), "存在" if path.exists() else "缺失"))
+
+    # 国际文档目录（文件数需与索引一致）
+    for directory, expected in (("assets/esco_details_md", 3036), ("assets/onet_details_md", 896)):
+        path = Path(directory)
+        count = len(list(path.glob("*.md"))) if path.exists() else 0
+        checks.append((directory, count == expected, f"{count} 个文件（期望 {expected}）"))
     
     # 职业大典分块目录
     occ_dir = Path("assets/occupation_dictionary_split")
@@ -105,6 +113,14 @@ python scripts/occupation_dict_loader.py
 
 运行时会自动验证文件。
 
+### 2.4 校验 ESCO/O*NET 索引
+
+```bash
+python scripts/build_intl_index.py --check
+```
+
+校验索引条数、代码唯一性、`md_url` 前缀，以及与本地文档的双向一致性。
+
 ---
 
 ## 三、数据源优先级
@@ -114,8 +130,10 @@ python scripts/occupation_dict_loader.py
 | 1 | `assets/moe_pdfs_final.json` | 专业教学标准 | 主数据源（PDF链接指向GitHub镜像） |
 | 2 | `assets/moe_jianjie_final_github.json` | 专业简介索引 | 兜底数据源（md_url指向GitHub镜像） |
 | 3 | `assets/moe_pdfs_md/` | 专业简介（类级MD） | 离线兜底 |
-| 4 | `assets/esco_details_md/` | ESCO职业文档 | 本地文档 |
-| 5 | `assets/onet_details_md/` | O*NET职业文档 | 本地文档 |
+| 4 | `assets/esco_final.json` | ESCO索引 | 3036条，`md_url`指向GitHub镜像 |
+| 5 | `assets/onet_final.json` | O*NET索引 | 896条，`md_url`指向GitHub镜像 |
+| 6 | `assets/esco_details_md/` | ESCO职业文档 | 本地离线兜底 |
+| 7 | `assets/onet_details_md/` | O*NET职业文档 | 本地离线兜底 |
 
 ---
 

@@ -229,7 +229,7 @@ occupation_data = loader.load_by_occupation_code('6-05-01-01')
 
 | 数据源 | 编码格式 | 示例 | 文件命名规则 |
 |--------|----------|------|--------------|
-| **ESCO** | 4位数字 | `2636`、`7231`、`7541` | `{编码}.1.md`（如 `2636.1.md`） |
+| **ESCO** | 4位数字 | `2636`、`7231`、`7541` | `{ISCO代码}.{子序号}.md`（如 `2636.1.md`、`2310.1.23.md`） |
 | **O*NET** | XX-XXXX.XX | `27-1022.00`、`49-3023.00` | `{编码}.md`（如 `27-1022.00.md`） |
 
 **常见错误示例**：
@@ -500,7 +500,7 @@ python scripts/integrate_data.py \
 | 专业教学标准 | `major_info.json` | `# 专业教学标准` |
 | 中国职业信息 | `occupation_dict_data.json` | `# 职业信息` |
 | 国际职业代码映射 | `occupation_mapping_info.json` | `# 国际职业代码映射` |
-| ESCO/O*NET原始文档 | 按映射代码直接从 `assets/` 读取 | 按职业分节 |
+| ESCO/O*NET原始文档 | 按映射代码经 `assets/{esco,onet}_final.json` 定位（本地优先，缺失可 `--fetch`） | 按职业分节 |
 
 ### 输出格式
 
@@ -532,8 +532,17 @@ python scripts/integrate_data.py \
 ### 关键约束
 
 - **零提取、零转换**：直接读取原始MD文件内容，不做解析转换
-- **按需读取**：根据映射中的ESC代码读取 `assets/esco_details_md/`，O*NET代码读取 `assets/onet_details_md/`
+- **按需读取**：先用 `python scripts/search_intl.py --code <代码>` 从索引定位，再读取 `assets/esco_details_md/` 或 `assets/onet_details_md/`；本地缺失时加 `--fetch` 从 GitHub 镜像拉取
 - Python脚本只做数据搬运，不做语义推断
+
+**索引定位示例**：
+
+```bash
+python scripts/search_intl.py --source esco --code 2636 --limit 5
+python scripts/search_intl.py --source onet --code 27-1022
+python scripts/search_intl.py --source both --name "financial analyst"
+python scripts/search_intl.py --source esco --code 2636.1 --fetch --output temp/esco_doc.md
+```
 
 ---
 

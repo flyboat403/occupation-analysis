@@ -80,6 +80,9 @@ occupation-analysis/
 │
 ├── scripts/                    # 核心脚本
 │   ├── search_major.py        # 专业教学标准检索（含职业对照）
+│   ├── search_intl.py         # ESCO/O*NET 文档检索
+│   ├── build_intl_index.py    # ESCO/O*NET 索引生成与校验
+│   ├── doc_fetch.py           # 文档下载/缓存（白名单+TTL）
 │   ├── generate_report.py     # 报告生成
 │   ├── validate_report.py     # 报告验证（14项指标）
 │   ├── occupation_dict_loader.py  # 职业大典分块加载
@@ -102,8 +105,10 @@ occupation-analysis/
 │   ├── 职业教育专业目录.xlsx   # 专业目录（1490条，含国控K专业）
 │   ├── 专业-职业对照表.xlsx    # 专业对应职业对照表（1169条）
 │   ├── occupation_dictionary_split/  # 中国职业大典（按7大类拆分）
-│   ├── esco_details_md/       # ESCO 职业文档（~3,000个）
-│   └── onet_details_md/       # O*NET 职业文档（894个）
+│   ├── esco_final.json        # ESCO 索引（3036条，含别名，md_url）
+│   ├── onet_final.json        # O*NET 索引（896条，md_url）
+│   ├── esco_details_md/       # ESCO 职业文档（3036个）
+│   └── onet_details_md/       # O*NET 职业文档（896个）
 │
 ├── temp/                       # 临时输出（运行时生成）
 │   ├── major_info.json        # 专业检索结果
@@ -124,10 +129,12 @@ occupation-analysis/
 | **专业简介索引** | `assets/moe_jianjie_final_github.json` | 专业简介索引（1349条，`md_url`指向GitHub镜像，约471KB） |
 | **专业-职业对照表** | `assets/专业-职业对照表.xlsx` | 专业对应职业编码和名称（1169条） |
 | **中国职业大典** | `assets/occupation_dictionary_split/` | 2022版，按7个大类拆分 |
-| **ESCO** | `assets/esco_details_md/` | 欧洲技能/能力/资格框架（~3,000个文件） |
-| **O*NET** | `assets/onet_details_md/` | 美国职业信息网络（894个文件） |
+| **ESCO索引** | `assets/esco_final.json` | ESCO索引（3036条，含ISCO码与别名，`md_url`指向GitHub镜像，约1.6MB） |
+| **O*NET索引** | `assets/onet_final.json` | O*NET索引（896条，`md_url`指向GitHub镜像，约522KB） |
+| **ESCO** | `assets/esco_details_md/` | 欧洲技能/能力/资格框架（3036个文件，离线兜底） |
+| **O*NET** | `assets/onet_details_md/` | 美国职业信息网络（896个文件，离线兜底） |
 
-> 注：moe.gov.cn 原始链接已失效，索引中的 `pdf_url` 统一指向 GitHub 镜像仓库（flyboat403/vocational-education-standard-system），下载解析逻辑不变。
+> 注：moe.gov.cn 原始链接已失效，索引中的 `pdf_url` 统一指向 GitHub 镜像仓库（flyboat403/vocational-education-standard-system），下载解析逻辑不变。ESCO/O*NET 原文同步至同一镜像仓库（`esco_details_md/`、`onet_details_md/`），索引 `md_url` 可直接访问；来源与许可见镜像仓 `SOURCES.md`。
 
 ## 📝 报告结构（七部分）
 
@@ -158,9 +165,25 @@ python scripts/search_major.py --major "专业名称或代码" --level "教育�
 --no-pdf             跳过PDF解析（仅返回基本信息）
 ```
 
-### fetch_local.py - 本地文档查询（已移除）
+### search_intl.py - ESCO/O*NET 文档检索
 
-> ⚠️ 本脚本已从工作流中移除。国际文档查询功能已整合到 `integrate_data.py` 中。
+```bash
+python scripts/search_intl.py --source esco --code 2310
+python scripts/search_intl.py --source onet --code 11-9051
+python scripts/search_intl.py --source both --name "financial analyst"
+python scripts/search_intl.py --source esco --code 2310.1.23 --fetch --output temp/esco_doc.md
+
+# 参数说明
+--source              esco / onet / both
+--code                代码检索（ESCO支持4位ISCO或完整子码；O*NET自动补 .00）
+--name                名称/别名检索（忽略大小写）
+--fetch               下载匹配文档（默认缓存到 temp/intl_cache，TTL 7天）
+--output              --fetch 时的输出文件（仅限单条结果）
+--no-cache            禁用缓存
+--include-deprecated  包含 O*NET 已废弃别名条目
+```
+
+索引由 `python scripts/build_intl_index.py` 生成，`--check` 可校验与本地文档的一致性。
 
 ### integrate_data.py - 数据整合
 

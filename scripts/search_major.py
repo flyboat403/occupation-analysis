@@ -20,19 +20,17 @@
 """
 
 import json
-import os
 import re
-import time
 import argparse
-import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from major_catalog_mapper import get_catalog, get_category_from_major_code, get_md_file_path
+from doc_fetch import DEFAULT_CACHE_TTL, DEFAULT_URL_HOSTS, fetch_cached
 
-MD_CACHE_TTL = 7 * 24 * 3600
-MD_URL_HOSTS = ('raw.githubusercontent.com', 'github.com')
+MD_CACHE_TTL = DEFAULT_CACHE_TTL
+MD_URL_HOSTS = DEFAULT_URL_HOSTS
 
 try:
     import openpyxl
@@ -355,40 +353,7 @@ def find_jianjie_entry(
 
 def download_md_content(md_url: str, cache_dir: Optional[Path] = None, timeout: int = 30) -> Optional[str]:
     """下载简介MD内容（磁盘缓存+TTL+原子写入），失败返回None"""
-    if not md_url:
-        return None
-    parsed_url = urllib.parse.urlparse(md_url)
-    if parsed_url.scheme != 'https' or parsed_url.hostname not in MD_URL_HOSTS:
-        print(f"[WARNING] 拒绝非白名单URL: {md_url[:80]}")
-        return None
-    filename = Path(urllib.parse.unquote(md_url.rsplit('/', 1)[-1])).name or 'jianjie.md'
-    if cache_dir is not None:
-        try:
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            cached = cache_dir / filename
-            if cached.exists():
-                stat = cached.stat()
-                if stat.st_size > 0 and (time.time() - stat.st_mtime) < MD_CACHE_TTL:
-                    return cached.read_text(encoding='utf-8')
-        except OSError as e:
-            print(f"[WARNING] 简介缓存读取异常: {e}")
-    try:
-        req = urllib.request.Request(md_url, headers={'User-Agent': 'occupation-analysis/1.0'})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            content = resp.read().decode('utf-8', errors='replace')
-        if not content.strip():
-            return None
-        if cache_dir is not None:
-            try:
-                tmp = cache_dir / f".{filename}.{os.getpid()}.tmp"
-                tmp.write_text(content, encoding='utf-8')
-                tmp.replace(cache_dir / filename)
-            except OSError as e:
-                print(f"[WARNING] 简介缓存写入失败: {e}")
-        return content
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, UnicodeDecodeError) as e:
-        print(f"[WARNING] 简介下载失败 ({md_url[:60]}...): {e}")
-        return None
+    return fetch_cached(md_url, cache_dir=cache_dir, timeout=timeout, label='简介')
 
 
 def parse_md_content(content: str, target_code: str, source_file: str = '') -> Optional[Dict]:

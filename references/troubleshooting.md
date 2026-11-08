@@ -105,9 +105,10 @@ pandoc temp/report.md --reference-doc=references/reference.docx -o output/report
 
 当主要方法失败时，系统会自动尝试备选方案：
 
-1. **本地文档查询失败** → 检查 `assets/esco_details_md/` 和 `assets/onet_details_md/` 是否存在
-2. **MD文档不存在** → 报告警告，用户确认后继续
-3. **所有本地文档缺失** → 报告错误，保留已获取的数据
+1. **本地文档查询失败** → 检查 `assets/esco_details_md/`、`assets/onet_details_md/`；本地缺失时用 `python scripts/search_intl.py --code <代码> --fetch` 从 GitHub 镜像拉取
+2. **索引缺失或不一致** → 运行 `python scripts/build_intl_index.py` 重新生成，或 `--check` 校验
+3. **MD文档不存在** → 报告警告，用户确认后继续
+4. **所有本地与远程文档均缺失** → 报告错误，保留已获取的数据
 
 ---
 

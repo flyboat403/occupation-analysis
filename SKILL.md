@@ -310,7 +310,7 @@ dependency:
 **快速检查命令**：
 ```bash
 # 检查核心数据文件
-python -c "from pathlib import Path; files=['assets/moe_pdfs_final.json', 'assets/moe_jianjie_final_github.json', 'assets/moe_pdfs_md', 'assets/esco_details_md', 'assets/onet_details_md']; [print('[OK]' if Path(f).exists() else '[X]', f) for f in files]"
+python -c "from pathlib import Path; files=['assets/moe_pdfs_final.json', 'assets/moe_jianjie_final_github.json', 'assets/moe_pdfs_md', 'assets/esco_final.json', 'assets/onet_final.json', 'assets/esco_details_md', 'assets/onet_details_md']; [print('[OK]' if Path(f).exists() else '[X]', f) for f in files]"
 ```
 
 **核心检查项**：Python 3.8+、依赖安装、数据文件（职业大典、ESCO、O*NET本地文档）。
@@ -328,8 +328,10 @@ python -c "from pathlib import Path; files=['assets/moe_pdfs_final.json', 'asset
 | 专业简介MD | `assets/moe_pdfs_md/` | 类级专业简介MD（275个文件），简介索引不可用时的离线兜底 |
 | 专业-职业对照表 | `assets/专业-职业对照表.xlsx` | 专业对应职业和岗位的对照表 |
 | 职业大典 | `assets/occupation_dictionary_split/` | 中国职业分类大典（2022版，按大类拆分） |
-| ESCO文档 | `assets/esco_details_md/` | ESCO职业详细文档（约3000+个MD文件） |
-| O*NET文档 | `assets/onet_details_md/` | O*NET职业详细文档（894个MD文件） |
+| ESCO索引 | `assets/esco_final.json` | ESCO索引（3036条，含ISCO码与别名，md_url指向GitHub镜像） |
+| O*NET索引 | `assets/onet_final.json` | O*NET索引（896条，md_url指向GitHub镜像） |
+| ESCO文档 | `assets/esco_details_md/` | ESCO职业详细文档（3036个MD文件，离线兜底） |
+| O*NET文档 | `assets/onet_details_md/` | O*NET职业详细文档（896个MD文件，离线兜底） |
 
 ### 职业大典分段加载
 
@@ -339,8 +341,17 @@ python -c "from pathlib import Path; files=['assets/moe_pdfs_final.json', 'asset
 
 ### ESCO/O*NET查询
 
+- 索引：`assets/esco_final.json`（3036条，含ISCO码与别名）、`assets/onet_final.json`（896条）
+- 检索命令：
+  ```bash
+  python scripts/search_intl.py --source esco --code 2310
+  python scripts/search_intl.py --source onet --code 11-9051
+  python scripts/search_intl.py --source both --name "financial analyst"
+  python scripts/search_intl.py --source esco --code 2310.1.23 --fetch --output temp/esco_doc.md
+  ```
 - ESCO文件命名：`{ISCO代码}.{序号}.md`（如 `7231.1.md`）
 - O*NET文件命名：`{O*NET代码}.md`（如 `49-3023.00.md`）
+- 本地文档保留为离线兜底；索引 `md_url` 指向 GitHub 镜像，本地缺失时可用 `--fetch` 拉取
 
 ## 实施步骤概览
 
@@ -611,6 +622,8 @@ pip install requests python-dotenv pypandoc pypdf pdfplumber
 确保以下目录和文件存在：
 - `assets/moe_pdfs_final.json` - 专业教学标准
 - `assets/occupation_dictionary_split/` - 职业大典（按大类拆分）
+- `assets/esco_final.json` - ESCO索引
+- `assets/onet_final.json` - O*NET索引
 - `assets/esco_details_md/` - ESCO职业文档
 - `assets/onet_details_md/` - O*NET职业文档
 
@@ -618,7 +631,7 @@ pip install requests python-dotenv pypandoc pypdf pdfplumber
 
 | 类别 | 关键点 |
 |------|--------|
-| 数据完整性 | 专业教学标准用最新官方版、职业大典用2022 markdown版、ESCO/O*NET用本地文档 |
+| 数据完整性 | 专业教学标准用最新官方版、职业大典用2022 markdown版、ESCO/O*NET用索引（`esco_final.json`/`onet_final.json`）+ 本地文档兜底 |
 | 职业匹配 | 中国代码与国际标准需大模型语义推断、不同体系名称差异大、由大模型进行语义理解 |
 | 本地化 | ESCO/O*NET数据为英文需翻译、注意专业术语准确性、可保留双语版本 |
 | 层次适配 | 中职→操作技能、高职→技术应用、职教本科→管理优化 |
@@ -637,7 +650,7 @@ pip install requests python-dotenv pypandoc pypdf pdfplumber
 | 问题 | 原因 | 解决方案 |
 |------|------|----------|
 | 找不到专业教学标准 | 名称/代码错误 | 用代码检索、检查官方名称 |
-| 本地文档缺失 | 文件名不匹配 | 检查ESCO英文名/O*NET代码、支持模糊匹配 |
+| 本地文档缺失 | 文件名不匹配 | 检查ESCO英文名/O*NET代码、支持模糊匹配；用 `search_intl.py --code <代码> --fetch` 从镜像拉取 |
 | 表格格式错误 | 缺少分隔行 | 检查纵向表格格式 |
 | 用户提出非职业大典职业 | 无法获取标准定义 | 要求用户重新提出职业大典中存在的职业 |
 
