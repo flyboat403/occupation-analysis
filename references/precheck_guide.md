@@ -48,6 +48,7 @@ def check_environment():
     # 必需文件
     required_files = [
         "assets/moe_pdfs_final.json",
+        "assets/moe_jianjie_final_github.json",
         "assets/moe_pdfs_md",
     ]
     for f in required_files:
@@ -111,9 +112,10 @@ python scripts/occupation_dict_loader.py
 | 优先级 | 数据源 | 用途 | 备注 |
 |--------|--------|------|------|
 | 1 | `assets/moe_pdfs_final.json` | 专业教学标准 | 主数据源（PDF链接指向GitHub镜像） |
-| 2 | `assets/moe_pdfs_md/` | 专业简介（类级MD） | 备用数据源 |
-| 3 | `assets/esco_details_md/` | ESCO职业文档 | 本地文档 |
-| 4 | `assets/onet_details_md/` | O*NET职业文档 | 本地文档 |
+| 2 | `assets/moe_jianjie_final_github.json` | 专业简介索引 | 兜底数据源（md_url指向GitHub镜像） |
+| 3 | `assets/moe_pdfs_md/` | 专业简介（类级MD） | 离线兜底 |
+| 4 | `assets/esco_details_md/` | ESCO职业文档 | 本地文档 |
+| 5 | `assets/onet_details_md/` | O*NET职业文档 | 本地文档 |
 
 ---
 

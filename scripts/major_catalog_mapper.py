@@ -67,10 +67,13 @@ def get_category_from_major_code(catalog_df: pd.DataFrame, major_code: str) -> O
     Returns:
         {'大类代码': xx, '大类名称': xx, '类代码': xxxx, '类名称': xx, '专业代码': xxxxxx, '专业名称': xx, '学制': xx} 或 None
     """
-    if len(str(major_code)) != 6:
-        major_code = str(major_code).zfill(6)
-    
-    result = catalog_df[catalog_df['专业代码'] == str(major_code)]
+    code = str(major_code).strip().upper()
+    if len(code) != 6:
+        code = code.zfill(6)
+
+    result = catalog_df[catalog_df['专业代码'] == code]
+    if result.empty and len(code) == 6 and code.isdigit():
+        result = catalog_df[catalog_df['专业代码'] == code + 'K']
     if result.empty:
         return None
     

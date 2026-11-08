@@ -4,24 +4,35 @@
 专业教学标准检索脚本
 
 数据源优先级（更新）：
-1. 主数据源：assets/moe_pdfs_final.json（JSON索引）
+1. 主数据源：assets/moe_pdfs_final.json（PDF索引，仅索引不含内容）
    - 找到专业且有PDF URL → 下载并解析PDF获取完整内容
-   - 找到专业但无PDF URL → 返回基本信息
-2. 备用数据源：assets/moe_pdfs_md/{类代码}*.md
-   - 仅当在moe_pdfs_final.json中未找到专业时使用
+   - 找到专业但PDF不可解析 → 用专业简介索引补全职业面向/培养目标
+2. 备选数据源：assets/moe_jianjie_final_github.json（专业简介索引）
+   - 按专业代码查 md_url → 下载并解析专业简介（GitHub镜像）
+3. 离线兜底：assets/moe_pdfs_md/{类代码}*.md
+   - 简介索引缺失或下载失败时，扫描本地类级MD文件
 
 流程：
 1. 从 moe_pdfs_final.json 查找专业 → 得到 PDF URL
 2. 如果有 PDF URL，下载并解析 PDF
-3. 如果 moe_pdfs_final.json 中没有，则从 moe_pdfs_md 目录解析
+3. PDF 不可用时，从 moe_jianjie_final_github.json 查 md_url 下载解析专业简介
+4. 若主索引中没有该专业，则用简介索引检索；索引不可用再降级本地 moe_pdfs_md 目录
 """
 
 import json
+import os
 import re
+import time
 import argparse
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from major_catalog_mapper import get_catalog, get_category_from_major_code, get_md_file_path
+
+MD_CACHE_TTL = 7 * 24 * 3600
+MD_URL_HOSTS = ('raw.githubusercontent.com', 'github.com')
 
 try:
     import openpyxl
@@ -93,18 +104,22 @@ def search_major(
     output_path: Optional[str] = None,
     use_fallback: bool = True,
     parse_pdf: bool = True,
-    cache_dir: Optional[str] = "temp/pdf_cache"
+    cache_dir: Optional[str] = "temp/pdf_cache",
+    jianjie_json_path: str = "assets/moe_jianjie_final_github.json",
+    md_cache_dir: Optional[str] = "temp/md_cache"
 ) -> Dict:
     """
     检索专业教学标准
-    
+
     数据源优先级：
     1. 主数据源：moe_pdfs_final.json
        - 找到专业且有PDF URL → 下载并解析PDF获取完整内容
-       - 找到专业但无PDF URL → 返回基本信息
-    2. 备用数据源：moe_pdfs_md/{类代码}*.md
-       - 仅当在moe_pdfs_final.json中未找到专业时使用
-    
+       - 找到专业但PDF不可解析 → 用专业简介索引补全职业面向/培养目标
+    2. 备选数据源：moe_jianjie_final_github.json（专业简介索引）
+       - 按专业代码查 md_url → 下载并解析专业简介
+    3. 离线兜底：moe_pdfs_md/{类代码}*.md
+       - 简介索引缺失或下载失败时使用
+
     Args:
         query: 专业名称或代码
         level: 教育层次（可选）
@@ -113,7 +128,9 @@ def search_major(
         use_fallback: 是否使用备用数据源（默认True）
         parse_pdf: 是否解析PDF获取完整内容（默认True）
         cache_dir: PDF缓存目录（默认temp/pdf_cache）
-    
+        jianjie_json_path: 专业简介索引路径（默认assets/moe_jianjie_final_github.json）
+        md_cache_dir: 专业简介MD缓存目录（默认temp/md_cache）
+
     Returns:
         检索结果字典
     """
@@ -139,9 +156,14 @@ def search_major(
         try:
             data = load_major_data(json_full_path)
             
-            # 尝试按代码检索
-            if query.isdigit() and len(query) == 6:
-                result = search_by_code(data, query)
+            # 尝试按代码检索（兼容 K 后缀国控专业）
+            code_query = query.strip().upper()
+            if re.fullmatch(r'\d{6}K?', code_query):
+                result = search_by_code(data, code_query)
+                if not result and code_query.endswith('K'):
+                    result = search_by_code(data, code_query[:-1])
+                if not result and len(code_query) == 6 and code_query.isdigit():
+                    result = search_by_code(data, code_query + 'K')
                 if result:
                     results = [result]
             else:
@@ -188,10 +210,27 @@ def search_major(
                 "data_source": "failed"
             }
     
+    # PDF不可解析时用专业简介索引补全内容（仅填空字段，失败静默）
+    if results and parse_pdf and not pdf_parsed:
+        jianjie_index = load_jianjie_index(project_root / jianjie_json_path)
+        if jianjie_index:
+            md_cache_path = (project_root / md_cache_dir) if md_cache_dir else None
+            for result in results:
+                if fill_result_from_jianjie(result, jianjie_index, md_cache_path):
+                    print(f"[OK] 已用专业简介补全内容: {result.get('major_code')}")
+
     # 备用数据源检索（仅当主数据源未找到时）
     if not results and use_fallback:
         print(f"[INFO] 主数据源未找到结果，尝试备用数据源...")
-        fallback_results = search_from_fallback(query, level, project_root)
+        jianjie_index = load_jianjie_index(project_root / jianjie_json_path)
+        md_cache_path = (project_root / md_cache_dir) if md_cache_dir else None
+        fallback_results = search_from_fallback(
+            query,
+            level,
+            project_root,
+            jianjie_index=jianjie_index,
+            md_cache_dir=md_cache_path,
+        )
         if fallback_results:
             results = fallback_results
             data_source = "fallback"
@@ -266,157 +305,317 @@ def parse_pdf_to_result(
         return None
 
 
+def load_jianjie_index(json_path: Path) -> List[Dict]:
+    """加载专业简介索引（字段：major_code / major_name / education_level / md_url）"""
+    if not json_path.exists():
+        return []
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"[WARNING] 专业简介索引加载失败: {e}")
+        return []
+
+
+def _normalize_major_code(code: str) -> str:
+    code = str(code or '').strip().upper()
+    return code[:-1] if code.endswith('K') else code
+
+
+def build_jianjie_lookup(index: List[Dict]) -> Dict[str, Dict]:
+    """构建 normalized_code -> entry 的索引字典，避免重复线性扫描"""
+    return {_normalize_major_code(item.get('major_code', '')): item for item in index}
+
+
+def find_jianjie_entry(
+    index: List[Dict],
+    major_code: str,
+    category_code: str = '',
+    lookup: Optional[Dict[str, Dict]] = None
+) -> Optional[Dict]:
+    """在简介索引中定位条目：6位代码（忽略K）精确匹配 → 4位专业类前缀首个条目"""
+    target = _normalize_major_code(major_code)
+    if target:
+        if lookup is not None:
+            item = lookup.get(target)
+            if item:
+                return item
+        else:
+            for item in index:
+                if _normalize_major_code(item.get('major_code', '')) == target:
+                    return item
+    if category_code:
+        prefix = _normalize_major_code(category_code)[:4]
+        for item in index:
+            if _normalize_major_code(item.get('major_code', '')).startswith(prefix):
+                return item
+    return None
+
+
+def download_md_content(md_url: str, cache_dir: Optional[Path] = None, timeout: int = 30) -> Optional[str]:
+    """下载简介MD内容（磁盘缓存+TTL+原子写入），失败返回None"""
+    if not md_url:
+        return None
+    parsed_url = urllib.parse.urlparse(md_url)
+    if parsed_url.scheme != 'https' or parsed_url.hostname not in MD_URL_HOSTS:
+        print(f"[WARNING] 拒绝非白名单URL: {md_url[:80]}")
+        return None
+    filename = Path(urllib.parse.unquote(md_url.rsplit('/', 1)[-1])).name or 'jianjie.md'
+    if cache_dir is not None:
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cached = cache_dir / filename
+            if cached.exists():
+                stat = cached.stat()
+                if stat.st_size > 0 and (time.time() - stat.st_mtime) < MD_CACHE_TTL:
+                    return cached.read_text(encoding='utf-8')
+        except OSError as e:
+            print(f"[WARNING] 简介缓存读取异常: {e}")
+    try:
+        req = urllib.request.Request(md_url, headers={'User-Agent': 'occupation-analysis/1.0'})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            content = resp.read().decode('utf-8', errors='replace')
+        if not content.strip():
+            return None
+        if cache_dir is not None:
+            try:
+                tmp = cache_dir / f".{filename}.{os.getpid()}.tmp"
+                tmp.write_text(content, encoding='utf-8')
+                tmp.replace(cache_dir / filename)
+            except OSError as e:
+                print(f"[WARNING] 简介缓存写入失败: {e}")
+        return content
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, UnicodeDecodeError) as e:
+        print(f"[WARNING] 简介下载失败 ({md_url[:60]}...): {e}")
+        return None
+
+
+def parse_md_content(content: str, target_code: str, source_file: str = '') -> Optional[Dict]:
+    """解析专业简介MD文本，提取指定专业代码的段落（兼容K后缀国控专业）"""
+    if not content:
+        return None
+
+    result = {
+        'major_code': target_code,
+        'major_name': '',
+        'education_level': '',
+        'career_orientation': '',
+        'training_goal': '',
+        'raw_text': '',
+        'source_file': source_file,
+        'pdf_url': ''
+    }
+
+    target = _normalize_major_code(target_code)
+    major_section_pattern = rf'专业代码\s*{re.escape(target)}K?\s*\n(.*?)(?=专业代码\s*\d{{6}}K?|$)'
+    major_match = re.search(major_section_pattern, content, re.DOTALL)
+    if not major_match:
+        return result
+
+    major_section = major_match.group(1)
+    result['raw_text'] = re.sub(r'\n{3,}', '\n\n', major_section.strip())
+
+    name_match = re.search(r'专业名称\s*([^\n]+)', major_section)
+    if name_match:
+        result['major_name'] = name_match.group(1).strip()
+
+    orientation_match = re.search(r'#\s*职业面向\s*\n+(.*?)(?=\n#|\Z)', major_section, re.DOTALL)
+    if orientation_match:
+        result['career_orientation'] = orientation_match.group(1).strip()
+
+    goal_match = re.search(r'#\s*培养目标定位?\s*\n+(.*?)(?=\n#|\Z)', major_section, re.DOTALL)
+    if goal_match:
+        result['training_goal'] = goal_match.group(1).strip()
+
+    first = target[:1]
+    if first in ('2', '3'):
+        result['education_level'] = '职业教育本科'
+    elif first in ('4', '5'):
+        result['education_level'] = '高等职业教育'
+    elif first in ('6', '7'):
+        result['education_level'] = '中等职业教育'
+
+    return result
+
+
+def parse_md_file(md_path: Path, target_code: str) -> Optional[Dict]:
+    """解析本地类级专业简介MD文件，提取指定专业代码的段落"""
+    if not md_path.exists():
+        return None
+    try:
+        content = md_path.read_text(encoding='utf-8')
+        return parse_md_content(content, target_code, source_file=md_path.name)
+    except OSError as e:
+        print(f"[ERROR] 解析MD文件失败 {md_path}: {e}")
+        return None
+
+
+def resolve_jianjie_content(
+    major_code: str,
+    jianjie_index: List[Dict],
+    category_code: str = '',
+    md_cache_dir: Optional[Path] = None,
+    lookup: Optional[Dict[str, Dict]] = None
+) -> Optional[Dict]:
+    """从简介索引解析指定专业内容；未命中/下载失败/段落缺失时返回None"""
+    entry = find_jianjie_entry(jianjie_index, major_code, category_code, lookup=lookup)
+    if not entry:
+        return None
+    content = download_md_content(entry.get('md_url', ''), md_cache_dir)
+    if not content:
+        return None
+    parsed = parse_md_content(
+        content,
+        major_code or entry.get('major_code', ''),
+        source_file=urllib.parse.unquote(entry.get('md_url', '').rsplit('/', 1)[-1]),
+    )
+    if not parsed or not parsed.get('raw_text'):
+        return None
+    parsed['content_source'] = 'moe_jianjie_github'
+    parsed['md_url'] = entry.get('md_url', '')
+    if not parsed.get('major_name'):
+        parsed['major_name'] = entry.get('major_name', '')
+    if not parsed.get('education_level'):
+        parsed['education_level'] = entry.get('education_level', '')
+    return parsed
+
+
+def fill_result_from_jianjie(result: Dict, jianjie_index: List[Dict], cache_dir: Optional[Path] = None) -> bool:
+    """PDF不可解析时，用专业简介索引补全职业面向/培养目标等空字段"""
+    if not jianjie_index:
+        return False
+    if result.get('career_orientation') and result.get('training_goal'):
+        return False
+    major_code = str(result.get('major_code', ''))
+    parsed = resolve_jianjie_content(major_code, jianjie_index, md_cache_dir=cache_dir)
+    if not parsed:
+        return False
+    filled = False
+    for key in ('career_orientation', 'training_goal', 'raw_text'):
+        if not result.get(key) and parsed.get(key):
+            result[key] = parsed[key]
+            filled = True
+    if not result.get('major_name'):
+        result['major_name'] = parsed.get('major_name', '')
+    if not result.get('education_level'):
+        result['education_level'] = parsed.get('education_level', '')
+    if filled:
+        result['content_source'] = 'moe_jianjie_github'
+        result['md_url'] = parsed.get('md_url', '')
+        result['md_file'] = urllib.parse.unquote(parsed.get('md_url', '').rsplit('/', 1)[-1])
+    return filled
+
+
 def search_from_fallback(
     query: str,
     level: Optional[str],
-    project_root: Path
+    project_root: Path,
+    jianjie_index: Optional[List[Dict]] = None,
+    md_cache_dir: Optional[Path] = None
 ) -> List[Dict]:
     """
     从备用数据源检索专业信息
-    
-    流程：
-    1. 从职业教育专业目录.xlsx获取专业所属类代码
-    2. 从moe_pdfs_md目录读取对应的MD文件
-    3. 解析MD文件提取专业信息
-    
+
+    优先级：专业简介索引（md_url下载） → 本地 moe_pdfs_md 目录（离线兜底）
+
     Args:
         query: 专业名称或代码
         level: 教育层次
         project_root: 项目根目录
-    
+        jianjie_index: 专业简介索引（None时直接走本地目录）
+        md_cache_dir: 简介MD缓存目录
+
     Returns:
         检索结果列表
     """
     results = []
-    
     try:
         catalog = get_catalog()
         moe_pdfs_md_dir = project_root / "assets/moe_pdfs_md"
-        
-        # 按专业代码检索
-        if query.isdigit() and len(query) == 6:
-            category_info = get_category_from_major_code(catalog, query)
-            if category_info:
-                md_path = get_md_file_path(category_info, moe_pdfs_md_dir)
-                if md_path:
-                    result = parse_md_file(md_path, query)
-                    if result:
-                        results.append(result)
-        
-        # 按专业名称检索
+
+        candidates: List[Tuple[str, Optional[Dict]]] = []
+        query_code = _normalize_major_code(query)
+        if query_code.isdigit() and len(query_code) == 6:
+            info = get_category_from_major_code(catalog, query_code)
+            candidates.append((str(query).strip(), info))
         else:
             from major_catalog_mapper import search_major_in_catalog
-            matches = search_major_in_catalog(query, catalog)
-            
-            for match in matches[:5]:  # 最多返回5个结果
-                md_path = get_md_file_path(match, moe_pdfs_md_dir)
-                if md_path:
-                    result = parse_md_file(md_path, match['专业代码'])
-                    if result:
-                        results.append(result)
-        
-        # 按层次筛选（备用数据源中可能没有层次信息，这里简单处理）
+            for match in search_major_in_catalog(query, catalog)[:5]:
+                code = str(match.get('专业代码', ''))
+                info = get_category_from_major_code(catalog, code)
+                candidates.append((code, info))
+
+            if jianjie_index:
+                seen = {code for code, _ in candidates}
+                for item in jianjie_index:
+                    name = str(item.get('major_name', ''))
+                    code = str(item.get('major_code', ''))
+                    if query in name and code not in seen:
+                        candidates.append((code, None))
+                        seen.add(code)
+                        if len(candidates) >= 5:
+                            break
+
+        if jianjie_index:
+            lookup = build_jianjie_lookup(jianjie_index)
+            for code, info in candidates:
+                category_code = str(info.get('类代码', '')) if info else ''
+                parsed = resolve_jianjie_content(
+                    code,
+                    jianjie_index,
+                    category_code=category_code,
+                    md_cache_dir=md_cache_dir,
+                    lookup=lookup,
+                )
+                if not parsed:
+                    continue
+                parsed['source'] = 'moe_jianjie_github'
+                results.append(parsed)
+            if not results:
+                print("[WARNING] 简介索引未命中或下载失败，降级为本地目录兜底")
+
+        if not results:
+            for code, info in candidates:
+                if not info:
+                    continue
+                md_path = get_md_file_path(info, moe_pdfs_md_dir)
+                if not md_path:
+                    continue
+                parsed = parse_md_file(md_path, code)
+                if parsed and parsed.get('raw_text'):
+                    parsed['source'] = 'moe_pdfs_md'
+                    results.append(parsed)
+
+        deduped = []
+        seen_codes = set()
+        for item in results:
+            key = _normalize_major_code(item.get('major_code', ''))
+            if key in seen_codes:
+                continue
+            seen_codes.add(key)
+            deduped.append(item)
+        results = deduped
+
         if level and results:
-            # 备用数据源中通过专业代码前缀判断层次
-            # 中职：7开头，高职：5开头
             level_prefix = {
-                '中职': '7',
-                '中等职业教育': '7',
-                '高职': '5',
-                '高等职业教育': '5',
-                '职教本科': '2',
-                '职业教育本科': '2'
+                '中职': ('6', '7'),
+                '中等职业教育': ('6', '7'),
+                '高职': ('4', '5'),
+                '高等职业教育': ('4', '5'),
+                '专科': ('4', '5'),
+                '职教本科': ('2', '3'),
+                '职业教育本科': ('2', '3'),
+                '本科': ('2', '3'),
             }
-            prefix = level_prefix.get(level)
-            if prefix:
-                results = [r for r in results if r.get('major_code', '').startswith(prefix)]
-    
+            prefixes = level_prefix.get(level)
+            if prefixes:
+                results = [r for r in results if str(r.get('major_code', '')).startswith(prefixes)]
+
     except Exception as e:
         print(f"[ERROR] 备用数据源检索失败: {e}")
-    
+
     return results
-
-
-def parse_md_file(md_path: Path, target_code: str) -> Optional[Dict]:
-    """
-    解析专业教学标准MD文件
-    
-    MD文件格式：
-    ```
-    专业代码 710201
-    
-    专业名称 计算机应用
-    
-    基本修业年限 三年
-    
-    # 职业面向
-    ...
-    
-    # 培养目标定位
-    ...
-    ```
-    
-    Args:
-        md_path: MD文件路径
-        target_code: 目标专业代码
-    
-    Returns:
-        专业信息字典
-    """
-    if not md_path.exists():
-        return None
-    
-    try:
-        with open(md_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        result = {
-            'major_code': target_code,
-            'major_name': '',
-            'education_level': '',
-            'career_orientation': '',
-            'training_goal': '',
-            'raw_text': '',
-            'source_file': str(md_path.name),
-            'pdf_url': ''
-        }
-        
-        major_section_pattern = rf'专业代码\s+{target_code}\s*\n(.*?)(?=专业代码\s+\d{{6}}|$)'
-        major_match = re.search(major_section_pattern, content, re.DOTALL)
-        
-        if not major_match:
-            return result
-        
-        major_section = major_match.group(1)
-        
-        result['raw_text'] = re.sub(r'\n{3,}', '\n\n', major_section.strip())
-        
-        # 提取专业名称
-        name_match = re.search(r'专业名称\s+([^\n]+)', major_section)
-        if name_match:
-            result['major_name'] = name_match.group(1).strip()
-        
-        # 提取职业面向（# 职业面向 和下一个 # 标题之间的内容）
-        orientation_match = re.search(r'# 职业面向\s*\n+(.*?)(?=\n# |\Z)', major_section, re.DOTALL)
-        if orientation_match:
-            result['career_orientation'] = orientation_match.group(1).strip()
-        
-        goal_match = re.search(r'培养目标[：:\s]*\n?(.*?)(?=\n\s*\n|\n#|\n二、|\n三、|\n【|$)', major_section, re.DOTALL)
-        if goal_match:
-            result['training_goal'] = goal_match.group(1).strip()
-        
-        if target_code.startswith('7'):
-            result['education_level'] = '中等职业教育'
-        elif target_code.startswith('5'):
-            result['education_level'] = '高等职业教育'
-        elif target_code.startswith('2'):
-            result['education_level'] = '职业教育本科'
-        
-        return result
-        
-    except Exception as e:
-        print(f"[ERROR] 解析MD文件失败 {md_path}: {e}")
-        return None
 
 
 # ==================== 专业-职业对照表查询 ====================
@@ -528,8 +727,12 @@ def main():
     parser.add_argument('--level', '-l', help='教育层次（中职/高职/职教本科）')
     parser.add_argument('--json', '-j', default='assets/moe_pdfs_final.json', help='JSON数据文件路径')
     parser.add_argument('--output', '-o', help='输出文件路径')
-    parser.add_argument('--no-pdf', action='store_true', help='不解析PDF，仅返回基本信息')
+    parser.add_argument('--no-pdf', action='store_true', help='不解析PDF（仍会尝试专业简介索引/本地MD兜底）')
     parser.add_argument('--cache-dir', default='temp/pdf_cache', help='PDF缓存目录')
+    parser.add_argument('--jianjie-json', default='assets/moe_jianjie_final_github.json',
+                        help='专业简介索引路径（GitHub镜像）')
+    parser.add_argument('--md-cache-dir', default='temp/md_cache', help='专业简介MD缓存目录')
+    parser.add_argument('--no-md-cache', action='store_true', help='禁用专业简介MD缓存（强制联网拉取）')
     parser.add_argument('--include-occupations', action='store_true', 
                         help='同时输出专业-职业对照表中的职业编码')
     
@@ -541,7 +744,9 @@ def main():
         json_path=args.json,
         output_path=args.output,
         parse_pdf=not args.no_pdf,
-        cache_dir=args.cache_dir
+        cache_dir=args.cache_dir,
+        jianjie_json_path=args.jianjie_json,
+        md_cache_dir=None if args.no_md_cache else args.md_cache_dir
     )
     
     # 保存完整raw_text到结果中（确保数据完整性）
@@ -636,10 +841,14 @@ def main():
         print(f"    PDF链接: {item['pdf_url']}")
         if item.get('pdf_parsed'):
             print(f"    PDF解析: ✅ 已解析")
-            if item.get('career_orientation'):
-                print(f"    职业面向: {item['career_orientation'][:100]}...")
         elif item.get('pdf_parse_error'):
             print(f"    PDF解析: ❌ {item['pdf_parse_error']}")
+        if item.get('content_source') == 'moe_jianjie_github':
+            print(f"    内容来源: 专业简介（GitHub镜像）")
+        elif item.get('source') == 'moe_pdfs_md':
+            print(f"    内容来源: 专业简介（本地MD兜底）")
+        if item.get('career_orientation'):
+            print(f"    职业面向: {item['career_orientation'][:100]}...")
         
         # 输出职业对照信息
         if item.get('occupations_from_mapping'):

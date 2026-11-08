@@ -14,13 +14,13 @@
 │  1. 从 moe_pdfs_final.json 查找专业                         │
 │     ↓                                                       │
 │  2. 找到？                                                   │
-│     ├─ YES → 获取 PDF URL                                   │
-│     │         ↓                                             │
-│     │    有 PDF URL？                                        │
-│     │    ├─ YES → 下载并解析PDF → 返回完整内容             │
-│     │    └─ NO  → 返回基本信息（无PDF URL）               │
+│     ├─ YES → PDF URL 可下载且解析成功？                     │
+│     │         ├─ YES → 返回完整教学标准内容                  │
+│     │         └─ NO  → 用简介索引补全职业面向/培养目标       │
 │     │                                                       │
-│  3. 未找到？ → 从 moe_pdfs_md 目录解析MD文件 🔄             │
+│  3. 未找到？ → 查简介索引 moe_jianjie_final_github.json      │
+│     │         ├─ 命中 → 下载 md_url 解析专业简介             │
+│     │         └─ 失败 → 本地 moe_pdfs_md 目录离线兜底        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -30,7 +30,8 @@
 |--------|--------|------|------|
 | 1 | `moe_pdfs_final.json` | 专业代码、名称、PDF URL（GitHub镜像） | 可用 |
 | 2 | PDF文档解析 | 完整专业教学标准内容 | 可用（需安装pdfplumber或pypdf）|
-| 3 | `moe_pdfs_md/*.md` | 专业简介MD（类级） | 可用（备用）|
+| 3 | `moe_jianjie_final_github.json` | 专业简介索引（md_url，GitHub镜像） | 可用（需网络，PDF不可用时兜底）|
+| 4 | `moe_pdfs_md/*.md` | 专业简介MD（类级） | 可用（离线兜底）|
 
 > 注：moe.gov.cn 原始链接已失效，`pdf_url` 已统一指向 GitHub 镜像仓库（flyboat403/vocational-education-standard-system），下载解析逻辑不变。
 
@@ -40,7 +41,7 @@
 # 完整检索（包含PDF解析）
 python scripts/search_major.py --major "专业名称" --level "教育层次" --output temp/major_info.json
 
-# 仅获取基本信息（不解析PDF）
+# 仅获取基本信息（不解析PDF，仍会尝试简介索引/本地MD兜底）
 python scripts/search_major.py --major "专业名称" --level "教育层次" --no-pdf --output temp/major_info.json
 ```
 
@@ -53,9 +54,11 @@ python scripts/search_major.py --major "专业名称" --level "教育层次" --n
 | `education_level` | 教育层次 | 必需 |
 | `pdf_url` | PDF文档链接（GitHub镜像） | moe_pdfs_final.json |
 | `pdf_parsed` | PDF是否已解析 | 布尔值 |
-| `career_orientation` | 职业面向 | PDF解析或MD文件 |
-| `training_goal` | 培养目标 | PDF解析或MD文件 |
+| `career_orientation` | 职业面向 | PDF解析或专业简介 |
+| `training_goal` | 培养目标 | PDF解析或专业简介 |
 | `main_courses` | 主要课程 | PDF解析（可选）|
+| `content_source` | 简介补全来源 | `moe_jianjie_github`（PDF不可用时）|
+| `md_url` | 专业简介MD链接（GitHub镜像） | 简介索引 |
 | `data_source` | 数据来源 | primary/fallback |
 
 ---
@@ -553,10 +556,11 @@ ls assets/moe_pdfs_md/ | grep "专业代码"
 
 **Fallback 方案**：
 
-| 场景 | 命令 |
+| 场景 | 处理 |
 |------|------|
-| PDF下载失败 | `python scripts/search_major.py --major "专业名称" --no-pdf` |
-| 使用备选MD文档 | Agent直接读取 `assets/moe_pdfs_md/` 对应文件 |
+| PDF下载/解析失败 | 脚本自动用 `moe_jianjie_final_github.json` 补全职业面向/培养目标（标记 `content_source`） |
+| 简介索引下载失败 | 脚本自动降级扫描本地 `assets/moe_pdfs_md/`（标记 `source=moe_pdfs_md`） |
+| 完全离线 | 保留本地 `assets/moe_pdfs_md/` 目录即可离线兜底 |
 
 ### 步骤2边缘场景：职业大典格式异常
 
