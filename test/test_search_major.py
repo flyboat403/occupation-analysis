@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'scripts'))
 
 import search_major as sm  # noqa: E402
+from doc_fetch import DEFAULT_CACHE_TTL  # noqa: E402
 from major_catalog_mapper import get_catalog, get_category_from_major_code  # noqa: E402
 
 MD_DIR = ROOT / 'assets' / 'moe_pdfs_md'
@@ -29,8 +30,8 @@ class FakeResponse:
     def __exit__(self, *args):
         return False
 
-    def read(self):
-        return self._data
+    def read(self, size=-1):
+        return self._data if size is None or size < 0 else self._data[:size]
 
 
 def read_md(name: str) -> str:
@@ -167,7 +168,7 @@ class DownloadGuardTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             cache = Path(tmp)
             url = 'https://raw.githubusercontent.com/o/r/..%2F..%2Fevil.md'
-            with patch.object(sm.urllib.request, 'urlopen', return_value=FakeResponse(payload)):
+            with patch('doc_fetch.urllib.request.urlopen', return_value=FakeResponse(payload)):
                 content = sm.download_md_content(url, cache)
             self.assertEqual(content, '# test')
             self.assertTrue((cache / 'evil.md').exists())
@@ -179,10 +180,10 @@ class DownloadGuardTest(unittest.TestCase):
             cache = Path(tmp)
             cached = cache / 'a.md'
             cached.write_text('old', encoding='utf-8')
-            stale = time.time() - sm.MD_CACHE_TTL - 60
+            stale = time.time() - DEFAULT_CACHE_TTL - 60
             os.utime(cached, (stale, stale))
             url = 'https://raw.githubusercontent.com/o/r/a.md'
-            with patch.object(sm.urllib.request, 'urlopen', return_value=FakeResponse(b'new')) as mock:
+            with patch('doc_fetch.urllib.request.urlopen', return_value=FakeResponse(b'new')) as mock:
                 content = sm.download_md_content(url, cache)
             self.assertEqual(content, 'new')
             mock.assert_called_once()
@@ -194,7 +195,7 @@ class DownloadGuardTest(unittest.TestCase):
             cache = Path(tmp)
             (cache / 'a.md').write_text('cached', encoding='utf-8')
             url = 'https://raw.githubusercontent.com/o/r/a.md'
-            with patch.object(sm.urllib.request, 'urlopen', return_value=FakeResponse(b'new')) as mock:
+            with patch('doc_fetch.urllib.request.urlopen', return_value=FakeResponse(b'new')) as mock:
                 content = sm.download_md_content(url, cache)
             self.assertEqual(content, 'cached')
             mock.assert_not_called()

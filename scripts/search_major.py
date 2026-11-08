@@ -23,14 +23,10 @@ import json
 import re
 import argparse
 import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from major_catalog_mapper import get_catalog, get_category_from_major_code, get_md_file_path
-from doc_fetch import DEFAULT_CACHE_TTL, DEFAULT_URL_HOSTS, fetch_cached
-
-MD_CACHE_TTL = DEFAULT_CACHE_TTL
-MD_URL_HOSTS = DEFAULT_URL_HOSTS
+from doc_fetch import fetch_cached
 
 try:
     import openpyxl

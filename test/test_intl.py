@@ -2,10 +2,13 @@
 # -*- coding: utf-8 -*-
 """ESCO / O*NET 索引生成与检索的离线单元测试"""
 
+import io
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,6 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'scripts'))
 
 import build_intl_index as bi  # noqa: E402
+import doc_fetch  # noqa: E402
 import search_intl as si  # noqa: E402
 
 BASE = 'https://raw.githubusercontent.com/o/r/main'
@@ -129,17 +133,69 @@ class SearchTest(unittest.TestCase):
                          ['15-1199.08'])
 
     def test_name_and_alias_search(self):
-        results = si.search(self.esco, None, 'financial analyst')
+        results = si.search(self.esco, None, 'financial analyst', source='esco')
         self.assertEqual(results[0]['esco_code'], '2413.1')
-        alias = si.search(self.esco, None, 'PROFESSOR OF LINGUISTICS')
+        alias = si.search(self.esco, None, 'PROFESSOR OF LINGUISTICS', source='esco')
         self.assertEqual(alias[0]['esco_code'], '2310.1.23')
         self.assertEqual(alias[0]['matched_on'], 'alias')
 
     def test_local_availability(self):
-        results = si.search(self.esco, '2310', None)
+        results = si.search(self.esco, '2310', None, source='esco')
         self.assertTrue(results)
         for entry in results:
             self.assertTrue(Path(entry['local_path']).exists())
+
+    def test_local_path_respects_assets_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            assets = Path(tmp)
+            entries = si.load_index(ROOT / 'assets' / 'esco_final.json', 'esco', assets)
+        entry = next(e for e in entries if e['esco_code'] == '2310.1.23')
+        self.assertEqual(entry['local_path'], str(assets / 'esco_details_md' / '2310.1.23.md'))
+
+    def test_load_index_defaults_to_index_directory(self):
+        entries = si.load_index(ROOT / 'assets' / 'esco_final.json', 'esco')
+        entry = next(e for e in entries if e['esco_code'] == '2310.1.23')
+        self.assertEqual(entry['local_path'],
+                         str(ROOT / 'assets' / 'esco_details_md' / '2310.1.23.md'))
+        self.assertTrue(Path(entry['local_path']).exists())
+
+    def test_cli_assets_dir_defaults_to_skill_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                [sys.executable, str(ROOT / 'scripts' / 'search_intl.py'),
+                 '--source', 'esco', '--code', '2310.1.23'],
+                cwd=tmp, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('本地', result.stdout)
+
+
+class DocFetchTest(unittest.TestCase):
+    def test_warning_goes_to_stderr(self):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            self.assertIsNone(doc_fetch.fetch_cached('http://evil.example.com/x.md'))
+        self.assertEqual(out.getvalue(), '')
+        self.assertIn('[WARNING]', err.getvalue())
+
+    def test_corrupt_cache_falls_back_to_download(self):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self, size=-1):
+                return b'# fresh'
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = Path(tmp)
+            (cache / 'a.md').write_bytes(b'\xff\xfe')
+            with patch('doc_fetch.urllib.request.urlopen', return_value=FakeResponse()):
+                content = doc_fetch.fetch_cached(
+                    'https://raw.githubusercontent.com/o/r/a.md', cache)
+            self.assertEqual(content, '# fresh')
+            self.assertEqual((cache / 'a.md').read_text(encoding='utf-8'), '# fresh')
 
 
 class FetchTest(unittest.TestCase):

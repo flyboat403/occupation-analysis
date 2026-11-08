@@ -13,7 +13,7 @@
 | Python 环境 | `python --version` | Python 3.8+ |
 | 依赖安装 | `pip install -r requirements.txt` | 无错误 |
 | 数据文件存在 | 检查 `assets/moe_pdfs_final.json` | 文件存在 |
-| 职业大典存在 | 检查 `assets/occupation_dictionary_split/` | 目录有6个文件 |
+| 职业大典存在 | 检查 `assets/occupation_dictionary_split/` | 大类文件与 `split_info.json` 记录一致 |
 | 输出目录 | 检查/创建 `output/` 和 `temp/` | 目录存在 |
 | IMA 凭证 | 检查环境变量 `IMA_OPENAPI_CLIENTID` | 已设置 |
 
@@ -34,6 +34,7 @@ python -c "from pathlib import Path; print('[OK]' if Path('assets/moe_pdfs_final
 #!/usr/bin/env python3
 """预检验证脚本"""
 
+import json
 import os
 from pathlib import Path
 
@@ -58,18 +59,45 @@ def check_environment():
         checks.append((f, path.exists(), "存在" if path.exists() else "缺失"))
 
     # 国际文档目录（文件数需与索引一致）
-    for directory, expected in (("assets/esco_details_md", 3036), ("assets/onet_details_md", 896)):
+    for index_file, directory in (
+        ("assets/esco_final.json", "assets/esco_details_md"),
+        ("assets/onet_final.json", "assets/onet_details_md"),
+    ):
         path = Path(directory)
         count = len(list(path.glob("*.md"))) if path.exists() else 0
-        checks.append((directory, count == expected, f"{count} 个文件（期望 {expected}）"))
+        index_path = Path(index_file)
+        try:
+            expected = len(json.loads(index_path.read_text(encoding="utf-8")))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+            checks.append((directory, False, f"索引读取失败: {index_file} ({e})"))
+            continue
+        checks.append((directory, count == expected, f"{count} 个文件（索引 {expected}）"))
     
     # 职业大典分块目录
     occ_dir = Path("assets/occupation_dictionary_split")
-    if occ_dir.exists():
-        file_count = len(list(occ_dir.glob("*.md")))
-        checks.append(("职业大典分块", file_count == 6, f"{file_count} 个文件"))
-    else:
+    split_info_path = occ_dir / "split_info.json"
+    if not occ_dir.exists():
         checks.append(("职业大典分块", False, "目录不存在"))
+    elif not split_info_path.exists():
+        checks.append(("职业大典分块", False, "缺少 split_info.json"))
+    else:
+        try:
+            sections = json.loads(split_info_path.read_text(encoding="utf-8")).get("sections", [])
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+            sections = None
+            checks.append(("职业大典分块", False, f"split_info.json 读取失败: {e}"))
+        if sections is not None:
+            if not sections:
+                checks.append(("职业大典分块", False, "split_info.json 未记录大类"))
+            else:
+                expected_names = {s.get("filename") for s in sections if s.get("filename")}
+                actual_names = {p.name for p in occ_dir.glob("*.md")}
+                missing = expected_names - actual_names
+                if missing:
+                    checks.append(("职业大典分块", False, f"缺少大类文件: {sorted(missing)}"))
+                else:
+                    checks.append(("职业大典分块", True,
+                                   f"{len(actual_names)} 个大类文件（与 split_info 一致）"))
     
     # 输出目录
     for d in ["output", "temp"]:

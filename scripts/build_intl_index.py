@@ -11,17 +11,39 @@ import argparse
 import json
 import re
 import sys
+from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 DEFAULT_BASE_URL = 'https://raw.githubusercontent.com/flyboat403/vocational-education-standard-system/main'
+SKILL_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_ASSETS_DIR = SKILL_ROOT / 'assets'
 ESCO_DIR = 'esco_details_md'
 ONET_DIR = 'onet_details_md'
 ONET_RE = re.compile(r'^(\d{2}-\d{4}\.\d{2}) - (.+)$')
 
 
+@dataclass(frozen=True)
+class IndexSpec:
+    dirname: str
+    code_key: str
+    label: str
+
+
+ESCO_SPEC = IndexSpec(ESCO_DIR, 'esco_code', 'ESCO')
+ONET_SPEC = IndexSpec(ONET_DIR, 'onet_code', 'O*NET')
+
+
 def _read_lines(path: Path) -> List[str]:
     return path.read_text(encoding='utf-8').splitlines()
+
+
+def _read_md(path: Path) -> Tuple[List[str], str]:
+    lines = _read_lines(path)
+    if not lines or not lines[0].startswith('# '):
+        raise ValueError(f"首行标题格式异常: {path}")
+    return lines, lines[0][2:].strip()
 
 
 def _extract_table_field(lines: List[str], field: str) -> str:
@@ -39,9 +61,7 @@ def build_esco_index(esco_dir: Path, base_url: str) -> List[Dict]:
     files = sorted(esco_dir.glob('*.md'), key=lambda p: tuple(int(x) for x in p.stem.split('.')))
     entries = []
     for path in files:
-        lines = _read_lines(path)
-        if not lines or not lines[0].startswith('# '):
-            raise ValueError(f"首行标题格式异常: {path}")
+        lines, title = _read_md(path)
         alt_terms = []
         try:
             start = lines.index('## Alternative Terms')
@@ -55,7 +75,7 @@ def build_esco_index(esco_dir: Path, base_url: str) -> List[Dict]:
         entries.append({
             'esco_code': path.stem,
             'isco_code': path.stem.split('.')[0],
-            'title': lines[0][2:].strip(),
+            'title': title,
             'uri': _extract_table_field(lines, 'URI'),
             'status': _extract_table_field(lines, 'Status'),
             'alternative_terms': alt_terms,
@@ -68,14 +88,12 @@ def build_onet_index(onet_dir: Path, base_url: str) -> List[Dict]:
     files = sorted(onet_dir.glob('*.md'))
     entries = []
     for path in files:
-        lines = _read_lines(path)
-        if not lines or not lines[0].startswith('# '):
-            raise ValueError(f"首行标题格式异常: {path}")
-        match = ONET_RE.match(lines[0][2:].strip())
+        lines, title = _read_md(path)
+        match = ONET_RE.match(title)
         if match:
             soc_code, title = match.group(1), match.group(2)
         else:
-            soc_code, title = path.stem, lines[0][2:].strip()
+            soc_code, title = path.stem, title
         also_called = []
         for line in lines[:10]:
             if line.startswith('- Also called:'):
@@ -92,33 +110,33 @@ def build_onet_index(onet_dir: Path, base_url: str) -> List[Dict]:
     return entries
 
 
-def _validate(entries: List[Dict], source_dir: Path, dirname: str, code_key: str,
-              base_url: str, label: str) -> None:
+def _validate(entries: List[Dict], source_dir: Path, base_url: str, spec: IndexSpec) -> None:
     if not entries:
-        raise ValueError(f"{label} 索引为空")
-    codes = [e[code_key] for e in entries]
-    if len(codes) != len(set(codes)):
-        duplicated = sorted({c for c in codes if codes.count(c) > 1})
-        raise ValueError(f"{label} 代码重复: {duplicated[:5]}")
+        raise ValueError(f"{spec.label} 索引为空")
+    codes = [e[spec.code_key] for e in entries]
+    counts = Counter(codes)
+    duplicated = sorted(code for code, count in counts.items() if count > 1)
+    if duplicated:
+        raise ValueError(f"{spec.label} 代码重复: {duplicated[:5]}")
     expected_files = {p.stem for p in source_dir.glob('*.md')}
     if set(codes) != expected_files:
-        raise ValueError(f"{label} 索引与本地文件不一致: "
+        raise ValueError(f"{spec.label} 索引与本地文件不一致: "
                          f"缺 {len(expected_files - set(codes))}，多 {len(set(codes) - expected_files)}")
-    prefix = f"{base_url}/{dirname}/"
+    prefix = f"{base_url}/{spec.dirname}/"
     for entry in entries:
         if not entry.get('title'):
-            raise ValueError(f"{label} 标题为空: {entry[code_key]}")
+            raise ValueError(f"{spec.label} 标题为空: {entry[spec.code_key]}")
         url = entry.get('md_url', '')
         if not (url.startswith(prefix) and url.endswith('.md')):
-            raise ValueError(f"{label} md_url 非法: {url}")
+            raise ValueError(f"{spec.label} md_url 非法: {url}")
 
 
 def validate_files(esco_path: Path, onet_path: Path, esco_dir: Path, onet_dir: Path,
                    base_url: str) -> None:
     esco = json.loads(esco_path.read_text(encoding='utf-8'))
     onet = json.loads(onet_path.read_text(encoding='utf-8'))
-    _validate(esco, esco_dir, ESCO_DIR, 'esco_code', base_url, 'ESCO')
-    _validate(onet, onet_dir, ONET_DIR, 'onet_code', base_url, 'O*NET')
+    _validate(esco, esco_dir, base_url, ESCO_SPEC)
+    _validate(onet, onet_dir, base_url, ONET_SPEC)
     print(f"[OK] ESCO {len(esco)} 条，O*NET {len(onet)} 条，校验通过")
 
 
@@ -129,11 +147,11 @@ def _write(path: Path, entries: List[Dict]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description='生成 ESCO/O*NET 索引 JSON')
     parser.add_argument('--base-url', default=DEFAULT_BASE_URL, help='镜像仓库 raw 基础 URL')
-    parser.add_argument('--assets-dir', default='assets', help='assets 目录')
+    parser.add_argument('--assets-dir', help='assets 目录（默认：技能根目录下的 assets）')
     parser.add_argument('--check', action='store_true', help='仅校验已有索引，不重新生成')
     args = parser.parse_args()
 
-    assets = Path(args.assets_dir)
+    assets = Path(args.assets_dir) if args.assets_dir else DEFAULT_ASSETS_DIR
     esco_dir = assets / ESCO_DIR
     onet_dir = assets / ONET_DIR
     esco_path = assets / 'esco_final.json'
@@ -154,8 +172,8 @@ def main() -> int:
 
     esco = build_esco_index(esco_dir, base_url)
     onet = build_onet_index(onet_dir, base_url)
-    _validate(esco, esco_dir, ESCO_DIR, 'esco_code', base_url, 'ESCO')
-    _validate(onet, onet_dir, ONET_DIR, 'onet_code', base_url, 'O*NET')
+    _validate(esco, esco_dir, base_url, ESCO_SPEC)
+    _validate(onet, onet_dir, base_url, ONET_SPEC)
     _write(esco_path, esco)
     _write(onet_path, onet)
     print(f"[OK] 已生成 {esco_path} ({len(esco)} 条)")

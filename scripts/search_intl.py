@@ -16,20 +16,23 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from doc_fetch import fetch_cached
+from doc_fetch import cache_filename, fetch_cached
 
 ESCO_DIR = 'esco_details_md'
 ONET_DIR = 'onet_details_md'
+SKILL_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_ASSETS_DIR = SKILL_ROOT / 'assets'
 
 
-def load_index(path: Path, source: str) -> List[Dict]:
+def load_index(path: Path, source: str, assets_dir: Optional[Path] = None) -> List[Dict]:
     entries = json.loads(path.read_text(encoding='utf-8'))
+    base_dir = assets_dir if assets_dir is not None else path.parent
     for entry in entries:
         entry['source'] = source
         entry['code'] = entry.get('esco_code') if source == 'esco' else entry.get('onet_code')
         code = entry['code']
         local_dir = ESCO_DIR if source == 'esco' else ONET_DIR
-        entry['local_path'] = f"assets/{local_dir}/{code}.md"
+        entry['local_path'] = str(base_dir / local_dir / f"{code}.md")
     return entries
 
 
@@ -97,9 +100,9 @@ def _name_score(entry: Dict, query: str) -> tuple:
 
 
 def search(entries: List[Dict], code: Optional[str], name: Optional[str],
-           include_deprecated: bool = False) -> List[Dict]:
+           include_deprecated: bool = False, *, source: str) -> List[Dict]:
     if code:
-        if entries and entries[0]['source'] == 'esco':
+        if source == 'esco':
             return match_esco_code(entries, code)
         return match_onet_code(entries, code, include_deprecated)
     scored = []
@@ -137,15 +140,12 @@ def fetch_results(results: List[Dict], output: Optional[str], cache_dir: Optiona
             continue
         if output:
             target = Path(output)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content, encoding='utf-8')
-            item['fetched_path'] = str(target)
         else:
             target_dir = cache_dir if cache_dir is not None else Path('temp/intl_docs')
-            target_dir.mkdir(parents=True, exist_ok=True)
-            target = target_dir / Path(item['md_url'].rsplit('/', 1)[-1]).name
-            target.write_text(content, encoding='utf-8')
-            item['fetched_path'] = str(target)
+            target = target_dir / cache_filename(item['md_url'])
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding='utf-8')
+        item['fetched_path'] = str(target)
 
 
 def main() -> int:
@@ -161,13 +161,13 @@ def main() -> int:
     parser.add_argument('--md-cache-dir', default='temp/intl_cache', help='文档缓存目录')
     parser.add_argument('--no-cache', action='store_true', help='禁用缓存（写入 temp/intl_docs）')
     parser.add_argument('--include-deprecated', action='store_true', help='包含 O*NET 已废弃别名条目')
-    parser.add_argument('--assets-dir', default='assets', help='assets 目录')
+    parser.add_argument('--assets-dir', help='assets 目录（默认：技能根目录下的 assets）')
     args = parser.parse_args()
 
     if args.output and not args.fetch:
         parser.error('--output 需与 --fetch 一起使用')
 
-    assets = Path(args.assets_dir)
+    assets = Path(args.assets_dir) if args.assets_dir else DEFAULT_ASSETS_DIR
     sources = ['esco', 'onet'] if args.source == 'both' else [args.source]
     results: List[Dict] = []
     for source in sources:
@@ -175,8 +175,8 @@ def main() -> int:
         if not index_path.exists():
             print(f"[ERROR] 索引不存在: {index_path}", file=sys.stderr)
             return 1
-        entries = load_index(index_path, source)
-        results.extend(search(entries, args.code, args.name, args.include_deprecated))
+        entries = load_index(index_path, source, assets)
+        results.extend(search(entries, args.code, args.name, args.include_deprecated, source=source))
     if args.name:
         results.sort(key=lambda e: (-e.get('score', 0), e['source'], e['code']))
     results = results[:args.limit]

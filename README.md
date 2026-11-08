@@ -104,7 +104,7 @@ occupation-analysis/
 │   ├── moe_pdfs_md/           # 专业简介 MD 文件（离线兜底）
 │   ├── 职业教育专业目录.xlsx   # 专业目录（1490条，含国控K专业）
 │   ├── 专业-职业对照表.xlsx    # 专业对应职业对照表（1169条）
-│   ├── occupation_dictionary_split/  # 中国职业大典（按7大类拆分）
+│   ├── occupation_dictionary_split/  # 中国职业大典（按6大类拆分：class_1–class_6）
 │   ├── esco_final.json        # ESCO 索引（3036条，含别名，md_url）
 │   ├── onet_final.json        # O*NET 索引（896条，md_url）
 │   ├── esco_details_md/       # ESCO 职业文档（3036个）
@@ -128,7 +128,7 @@ occupation-analysis/
 | **专业教学标准** | `assets/moe_pdfs_final.json` | 教育部专业教学标准索引（579条，PDF链接指向GitHub镜像，约229KB） |
 | **专业简介索引** | `assets/moe_jianjie_final_github.json` | 专业简介索引（1349条，`md_url`指向GitHub镜像，约471KB） |
 | **专业-职业对照表** | `assets/专业-职业对照表.xlsx` | 专业对应职业编码和名称（1169条） |
-| **中国职业大典** | `assets/occupation_dictionary_split/` | 2022版，按7个大类拆分 |
+| **中国职业大典** | `assets/occupation_dictionary_split/` | 2022版，按6个大类拆分（`class_1`–`class_6`） |
 | **ESCO索引** | `assets/esco_final.json` | ESCO索引（3036条，含ISCO码与别名，`md_url`指向GitHub镜像，约1.6MB） |
 | **O*NET索引** | `assets/onet_final.json` | O*NET索引（896条，`md_url`指向GitHub镜像，约522KB） |
 | **ESCO** | `assets/esco_details_md/` | 欧洲技能/能力/资格框架（3036个文件，离线兜底） |
